@@ -254,21 +254,53 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
                 elif msg_type == "test_audio_result":
                     import base64
                     import soundfile as sf
+                    import sounddevice as sd
+                    import subprocess
+                    import tempfile
+
                     b64_str = payload.get("audio_b64", "")
+                    if "," in b64_str:
+                        b64_str = b64_str.split(",", 1)[1]
                     raw_bytes = base64.b64decode(b64_str)
-                    
-                    # Save test audio for web playback
+
+                    # Save raw received bytes
                     test_sound_path = STATIC_DIR / "sounds" / "satellite_test.wav"
                     test_sound_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(test_sound_path, "wb") as f:
-                        f.write(raw_bytes)
-
-                    # Transcribe using Faster-Whisper GPU
+                    
+                    # Convert to standard 16kHz Mono WAV using ffmpeg if not standard WAV
                     try:
-                        data, samplerate = sf.read(io.BytesIO(raw_bytes), dtype='int16')
+                        with tempfile.NamedTemporaryFile(suffix=".tmp", delete=False) as tmp_in:
+                            tmp_in.write(raw_bytes)
+                            tmp_in_path = tmp_in.name
+                        
+                        subprocess.run([
+                            "ffmpeg", "-loglevel", "quiet", "-i", tmp_in_path,
+                            "-ar", "16000", "-ac", "1", "-f", "wav", "-y", str(test_sound_path)
+                        ], check=True)
+                        try:
+                            os.remove(tmp_in_path)
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        # Fallback write directly
+                        with open(test_sound_path, "wb") as f:
+                            f.write(raw_bytes)
+
+                    # Transcribe using Faster-Whisper GPU & Playback to laptop speakers
+                    text = ""
+                    try:
+                        data, samplerate = sf.read(str(test_sound_path), dtype='int16')
                         if len(data.shape) > 1:
                             data = data.mean(axis=1).astype(np.int16)
+                        
                         text = stt_engine.transcribe(data, sample_rate=samplerate)
+                        
+                        # Playback test audio through laptop speakers for instant verification
+                        try:
+                            sd.play(data, samplerate)
+                        except Exception as p_err:
+                            logger.debug(f"Audio playback error: {p_err}")
+
                     except Exception as ex:
                         logger.error(f"Error transcribing test audio: {ex}")
                         text = f"(Lỗi STT: {ex})"

@@ -40,11 +40,11 @@
             flex-direction: column;
             align-items: center;
             justify-content: space-between;
-            padding: 1.5rem 1rem;
-            overflow: hidden;
+            padding: 1.2rem 1rem;
+            overflow-x: hidden;
             background-image: 
-                radial-gradient(circle at 50% 15%, rgba(0, 240, 255, 0.12) 0%, transparent 60%),
-                radial-gradient(circle at 50% 85%, rgba(129, 140, 248, 0.08) 0%, transparent 60%);
+                radial-gradient(circle at 50% 15%, rgba(0, 240, 255, 0.15) 0%, transparent 60%),
+                radial-gradient(circle at 50% 85%, rgba(129, 140, 248, 0.1) 0%, transparent 60%);
         }
 
         /* Top Header */
@@ -110,12 +110,12 @@
         /* Center Arc Reactor / VU Meter */
         .reactor-container {
             position: relative;
-            width: 260px;
-            height: 260px;
+            width: 240px;
+            height: 240px;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 1.5rem 0;
+            margin: 1rem 0;
         }
 
         .outer-ring {
@@ -141,9 +141,9 @@
             width: 60%;
             height: 60%;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(0, 240, 255, 0.4) 0%, rgba(0, 240, 255, 0.05) 70%, transparent 100%);
-            transition: transform 0.08s ease, filter 0.08s ease;
-            filter: drop-shadow(0 0 15px var(--cyan-glow));
+            background: radial-gradient(circle, rgba(0, 240, 255, 0.5) 0%, rgba(0, 240, 255, 0.1) 70%, transparent 100%);
+            transition: transform 0.05s ease, filter 0.05s ease;
+            filter: drop-shadow(0 0 20px var(--cyan-glow));
         }
 
         .reactor-center {
@@ -157,8 +157,8 @@
         }
 
         .mic-icon-svg {
-            width: 48px;
-            height: 48px;
+            width: 44px;
+            height: 44px;
             fill: var(--cyan-glow);
             filter: drop-shadow(0 0 10px var(--cyan-glow));
             transition: transform 0.2s ease;
@@ -176,6 +176,29 @@
         @keyframes rotate-slow {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
+        }
+
+        /* Gain Boost Slider */
+        .gain-slider-box {
+            width: 100%;
+            max-width: 480px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 8px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .gain-slider {
+            flex: 1;
+            accent-color: var(--cyan-glow);
+            cursor: pointer;
         }
 
         /* Live Response / Transcript Card */
@@ -218,7 +241,7 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
-            margin-top: 1rem;
+            margin-top: 0.8rem;
         }
 
         .btn-action {
@@ -301,7 +324,7 @@
             <span id="statusLabel">DISCONNECTED</span>
         </div>
         <h1 class="node-title">XIAOMI AI MIC NODE</h1>
-        <p class="node-subtitle">Direct Hardware Audio Uplink &bull; Zero Speaker Echo</p>
+        <p class="node-subtitle">Hardware Direct Mic Uplink &bull; Zero Speaker Echo</p>
     </div>
 
     <!-- Center Arc Reactor VU Meter -->
@@ -318,10 +341,17 @@
         </div>
     </div>
 
+    <!-- Gain Boost Slider -->
+    <div class="gain-slider-box">
+        <span>🚀 KHUẾCH ĐẠI MIC:</span>
+        <input type="range" class="gain-slider" id="gainSlider" min="1" max="25" value="10">
+        <span id="gainValue" style="color: var(--cyan-glow); font-weight: bold; width: 35px;">10x</span>
+    </div>
+
     <!-- Live Response / Transcript Card -->
     <div class="transcript-card">
         <div class="transcript-label" id="transcriptLabel">TRẠNG THÁI HỆ THỐNG</div>
-        <div class="transcript-content" id="transcriptContent">Chạm nút bên dưới để cấp quyền Microphone và bắt đầu truyền âm thanh trực tiếp.</div>
+        <div class="transcript-content" id="transcriptContent">Chạm nút bên dưới để bật Microphone và bắt đầu truyền âm thanh.</div>
     </div>
 
     <!-- Controls -->
@@ -330,7 +360,7 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
             </svg>
-            <span id="btnToggleText">KÍCH HOẠT MICROPHONE</span>
+            <span id="btnToggleText">BẬT MICROPHONE (ACTIVATE)</span>
         </button>
 
         <button class="btn-action btn-secondary" id="btnTestMic">
@@ -347,12 +377,12 @@
     <!-- Footer Metrics -->
     <div class="footer-metrics">
         <div class="metric-item">
-            <span>⚡ RMS:</span>
-            <span id="valRms" style="color: var(--cyan-glow);">0</span>
+            <span>⚡ LEVEL:</span>
+            <span id="valRms" style="color: var(--cyan-glow); font-weight: bold;">0%</span>
         </div>
         <div class="metric-item">
             <span>🔋 WAKE LOCK:</span>
-            <span id="valWakeLock" style="color: var(--accent-green);">ACTIVE</span>
+            <span id="valWakeLock" style="color: var(--accent-green);">ON</span>
         </div>
         <div class="metric-item">
             <span>📡 MASTER:</span>
@@ -371,6 +401,8 @@
         const btnToggleMic = document.getElementById('btnToggleMic');
         const btnToggleText = document.getElementById('btnToggleText');
         const btnTestMic = document.getElementById('btnTestMic');
+        const gainSlider = document.getElementById('gainSlider');
+        const gainValue = document.getElementById('gainValue');
         const valRms = document.getElementById('valRms');
         const valWakeLock = document.getElementById('valWakeLock');
         const valPing = document.getElementById('valPing');
@@ -379,28 +411,39 @@
         let ws = null;
         let audioContext = null;
         let mediaStream = null;
-        let scriptProcessor = null;
-        let isMicActive = false;
-        let isRecordingCommand = false;
+        let analyser = null;
+        let gainNode = null;
+        let mediaRecorder = null;
         let recordedChunks = [];
-        let wakeLock = null;
+        let isMicActive = false;
+        let isRecording = false;
+        let currentGain = 10.0;
+        let animFrameId = null;
         let pingInterval = null;
 
-        // Acquire Screen Wake Lock to keep phone screen & CPU awake
+        // Update Gain Slider
+        gainSlider.addEventListener('input', (e) => {
+            currentGain = parseFloat(e.target.value);
+            gainValue.textContent = `${currentGain}x`;
+            if (gainNode) {
+                gainNode.gain.value = currentGain;
+            }
+        });
+
+        // Screen Wake Lock
         async function requestWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                    valWakeLock.textContent = 'LOCKED ON';
+                    await navigator.wakeLock.request('screen');
+                    valWakeLock.textContent = 'ON';
                     valWakeLock.style.color = 'var(--accent-green)';
                 }
             } catch (err) {
                 valWakeLock.textContent = 'UNSUPPORTED';
-                valWakeLock.style.color = 'var(--text-muted)';
             }
         }
 
-        // Initialize WebSocket connection to Nexus Master
+        // Initialize WebSocket
         function connectWebSocket() {
             const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${location.host}/ws/satellite`;
@@ -410,16 +453,14 @@
             ws.onopen = () => {
                 statusDot.classList.add('active');
                 statusLabel.textContent = 'CONNECTED';
-                reactorStatus.textContent = isMicActive ? 'SẴN SÀNG' : 'CHỜ KÍCH HOẠT';
-                transcriptContent.textContent = 'Đã kết nối trực tiếp với Nexus Master AI Hub.';
+                reactorStatus.textContent = isMicActive ? 'SẴN SÀNG' : 'CHỜ BẬT MIC';
+                transcriptContent.textContent = 'Đã kết nối với Master AI Hub. Bật mic để nói chuyện.';
 
-                // Register satellite name
                 ws.send(JSON.stringify({
                     type: 'register',
-                    name: 'Xiaomi Phone Web Satellite (USB/WiFi)'
+                    name: 'Xiaomi Phone Web Satellite'
                 }));
 
-                // Start ping timer
                 if (pingInterval) clearInterval(pingInterval);
                 pingInterval = setInterval(() => {
                     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -440,18 +481,23 @@
                     else if (data.type === 'trigger_test_record') {
                         startTestRecording(data.duration || 5.0);
                     }
+                    else if (data.type === 'satellite_test_result') {
+                        transcriptLabel.textContent = 'KẾT QUẢ DỊCH GIỌNG NÓI (WHISPER GPU)';
+                        transcriptContent.textContent = `"${data.text}"`;
+                        reactorStatus.textContent = 'ĐÃ PHÁT QUA LOA';
+                    }
                     else if (data.type === 'speaker_status') {
                         if (data.speaking) {
-                            reactorStatus.textContent = 'AI ĐANG TRẢ LỜI';
-                            corePulse.style.filter = 'drop-shadow(0 0 25px var(--accent-purple))';
+                            reactorStatus.textContent = 'AI ĐANG NÓI';
+                            corePulse.style.filter = 'drop-shadow(0 0 30px var(--accent-purple))';
                         } else {
                             reactorStatus.textContent = 'ĐANG LẮNG NGHE';
-                            corePulse.style.filter = 'drop-shadow(0 0 15px var(--cyan-glow))';
+                            corePulse.style.filter = 'drop-shadow(0 0 20px var(--cyan-glow))';
                         }
                     }
                     else if (data.type === 'result') {
-                        transcriptLabel.textContent = 'KẾT QUẢ XỬ LÝ';
-                        transcriptContent.textContent = data.result?.response || 'Đã thực thi lệnh thành công.';
+                        transcriptLabel.textContent = 'AI HỒI ĐÁP';
+                        transcriptContent.textContent = data.result?.response || 'Đã thực thi thành công.';
                     }
                 } catch (e) {
                     console.error('WS parse error:', e);
@@ -472,181 +518,170 @@
             };
         }
 
-        // Initialize Web Audio Capture
+        // Real-time Visualizer Loop via AnalyserNode
+        function updateVisualizer() {
+            if (!analyser || !isMicActive) return;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+            }
+            const avg = sum / bufferLength; // 0 to 255
+            const levelPct = Math.min(100, Math.round((avg / 128) * 100));
+
+            valRms.textContent = `${levelPct}%`;
+            
+            // Visual feedback
+            const scale = 1.0 + (levelPct / 100) * 1.5;
+            corePulse.style.transform = `scale(${scale})`;
+
+            // Broadcast audio level to Master HUD
+            if (ws && ws.readyState === WebSocket.OPEN && Math.random() < 0.2) {
+                ws.send(JSON.stringify({
+                    type: 'audio_level',
+                    rms: levelPct / 100.0
+                }));
+            }
+
+            animFrameId = requestAnimationFrame(updateVisualizer);
+        }
+
+        // Start Mic Capture using native Web Audio + MediaRecorder
         async function startMicCapture() {
             try {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-                
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                }
+
                 mediaStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true,
-                        sampleRate: 16000,
-                        channelCount: 1
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: true
                     }
                 });
 
                 const source = audioContext.createMediaStreamSource(mediaStream);
-                scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
+                
+                // Software Gain Node for sensitivity boost
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = currentGain;
 
-                scriptProcessor.onaudioprocess = (e) => {
-                    const inputData = e.inputBuffer.getChannelData(0);
-                    
-                    // Calculate RMS
-                    let sum = 0;
-                    for (let i = 0; i < inputData.length; i++) {
-                        sum += inputData[i] * inputData[i];
-                    }
-                    const rms = Math.sqrt(sum / inputData.length);
-                    const rmsInt = Math.round(rms * 1000);
-                    valRms.textContent = rmsInt;
+                // Analyser Node for reactive Arc Reactor
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
 
-                    // Pulse center reactor visuals
-                    const scale = 1.0 + Math.min(rms * 4.0, 1.2);
-                    corePulse.style.transform = `scale(${scale})`;
-
-                    // If currently recording command or test
-                    if (isRecordingCommand) {
-                        const pcm16 = floatTo16BitPCM(inputData);
-                        recordedChunks.push(pcm16);
-                    }
-
-                    // Send audio level to master HUD
-                    if (ws && ws.readyState === WebSocket.OPEN && Math.random() < 0.25) {
-                        ws.send(JSON.stringify({
-                            type: 'audio_level',
-                            rms: rms
-                        }));
-                    }
-                };
-
-                source.connect(scriptProcessor);
-                scriptProcessor.connect(audioContext.destination);
+                source.connect(gainNode);
+                gainNode.connect(analyser);
 
                 isMicActive = true;
                 btnToggleMic.classList.remove('btn-primary');
                 btnToggleMic.classList.add('btn-secondary');
                 btnToggleText.textContent = 'TẮT MICROPHONE';
                 reactorStatus.textContent = 'ĐANG LẮNG NGHE';
-                transcriptLabel.textContent = 'MICROPHONE HOẠT ĐỘNG';
-                transcriptContent.textContent = 'Microphone điện thoại đang truyền âm thanh trực tiếp. Không dội loa, không tiếng vang!';
+                transcriptLabel.textContent = 'MICROPHONE ĐANG BẬT';
+                transcriptContent.textContent = 'Microphone đã kích hoạt! Hãy nói hoặc bấm nút "THU ÂM THỬ 5 GIÂY" để kiểm tra.';
 
                 requestWakeLock();
+                updateVisualizer();
             } catch (err) {
-                alert('Lỗi truy cập Microphone: ' + err.message);
+                alert('Không thể mở Microphone: ' + err.message);
                 console.error(err);
             }
         }
 
         function stopMicCapture() {
+            if (animFrameId) cancelAnimationFrame(animFrameId);
             if (mediaStream) {
-                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream.getTracks().forEach(t => t.stop());
             }
-            if (scriptProcessor) scriptProcessor.disconnect();
             if (audioContext) audioContext.close();
 
             isMicActive = false;
             btnToggleMic.classList.add('btn-primary');
             btnToggleMic.classList.remove('btn-secondary');
-            btnToggleText.textContent = 'KÍCH HOẠT MICROPHONE';
+            btnToggleText.textContent = 'BẬT MICROPHONE (ACTIVATE)';
             reactorStatus.textContent = 'CHƯA BẬT MIC';
-            valRms.textContent = '0';
+            valRms.textContent = '0%';
             corePulse.style.transform = 'scale(1)';
         }
 
-        // Float32 to Int16 PCM conversion
-        function floatTo16BitPCM(input) {
-            const output = new Int16Array(input.length);
-            for (let i = 0; i < input.length; i++) {
-                const s = Math.max(-1, Math.min(1, input[i]));
-                output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-            }
-            return output.buffer;
-        }
-
-        // Encode raw PCM buffers to base64 WAV
-        function encodeWAV(buffers, sampleRate = 16000) {
-            let totalLength = 0;
-            for (let buf of buffers) totalLength += buf.byteLength;
-            
-            const wavBuffer = new ArrayBuffer(44 + totalLength);
-            const view = new DataView(wavBuffer);
-
-            // RIFF header
-            writeString(view, 0, 'RIFF');
-            view.setUint32(4, 36 + totalLength, true);
-            writeString(view, 8, 'WAVE');
-            writeString(view, 12, 'fmt ');
-            view.setUint32(16, 16, true);
-            view.setUint16(20, 1, true); // PCM
-            view.setUint16(22, 1, true); // Mono
-            view.setUint32(24, sampleRate, true);
-            view.setUint32(28, sampleRate * 2, true);
-            view.setUint16(32, 2, true); // Block align
-            view.setUint16(34, 16, true); // Bits per sample
-            writeString(view, 36, 'data');
-            view.setUint32(40, totalLength, true);
-
-            let offset = 44;
-            for (let buf of buffers) {
-                const u8 = new Uint8Array(buf);
-                for (let i = 0; i < u8.length; i++) {
-                    view.setUint8(offset++, u8[i]);
-                }
-            }
-
-            // Convert to base64
-            let binary = '';
-            const bytes = new Uint8Array(wavBuffer);
-            for (let i = 0; i < bytes.byteLength; i++) {
-                binary += String.fromCharCode(bytes[i]);
-            }
-            return btoa(binary);
-        }
-
-        function writeString(view, offset, string) {
-            for (let i = 0; i < string.length; i++) {
-                view.setUint8(offset + i, string.charCodeAt(i));
-            }
-        }
-
-        // Test Recording Function
+        // Bulletproof MediaRecorder Test Recording (Native Audio Encoding)
         async function startTestRecording(durationSec = 5.0) {
-            if (!isMicActive) await startMicCapture();
+            if (!isMicActive || !mediaStream) {
+                await startMicCapture();
+            }
 
             recordedChunks = [];
-            isRecordingCommand = true;
+            
+            // Choose supported mimeType
+            let mimeType = 'audio/webm';
+            if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+                else if (MediaRecorder.isTypeSupported('audio/ogg')) mimeType = 'audio/ogg';
+                else mimeType = '';
+            }
+
+            const options = mimeType ? { mimeType } : {};
+            mediaRecorder = new MediaRecorder(mediaStream, options);
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) {
+                    recordedChunks.push(e.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64Data = reader.result; // data:audio/...;base64,XXXX
+                    
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'test_audio_result',
+                            audio_b64: base64Data
+                        }));
+                    }
+                };
+                reader.readAsDataURL(blob);
+
+                btnTestMic.classList.remove('btn-recording');
+                btnTestMic.querySelector('span').textContent = 'THU ÂM THỬ 5 GIÂY (TEST MIC)';
+                reactorStatus.textContent = 'ĐANG DỊCH STT...';
+                transcriptLabel.textContent = 'GPU FASTER-WHISPER';
+                transcriptContent.textContent = 'Đang nhận diện giọng nói & chuẩn bị phát lại qua Loa máy tính...';
+            };
+
+            // Start recording
+            mediaRecorder.start(100);
+            isRecording = true;
+
             btnTestMic.classList.add('btn-recording');
             btnTestMic.querySelector('span').textContent = `ĐANG THU ÂM (${durationSec}s)...`;
-            reactorStatus.textContent = 'ĐANG THU ÂM TEST';
-            transcriptLabel.textContent = 'ĐANG THU ÂM TEST';
-            transcriptContent.textContent = `Hãy nói thử vào điện thoại trong ${durationSec} giây...`;
+            reactorStatus.textContent = 'ĐANG THU ÂM';
+            transcriptLabel.textContent = 'ĐANG THU ÂM THỬ';
+            transcriptContent.textContent = `Hãy nói rõ vào điện thoại trong ${durationSec} giây...`;
 
-            // Notify master wake detected
+            // Notify instant wake chime
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'wake_detected' }));
             }
 
             setTimeout(() => {
-                isRecordingCommand = false;
-                btnTestMic.classList.remove('btn-recording');
-                btnTestMic.querySelector('span').textContent = 'THU ÂM THỬ 5 GIÂY (TEST MIC)';
-                reactorStatus.textContent = 'ĐANG XỬ LÝ GPU';
-                transcriptLabel.textContent = 'GPU WHISPER';
-                transcriptContent.textContent = 'Đang gửi âm thanh lên Master GPU để dịch STT và phát lại qua loa...';
-
-                const wavB64 = encodeWAV(recordedChunks, 16000);
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'test_audio_result',
-                        audio_b64: wavB64
-                    }));
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
                 }
+                isRecording = false;
             }, durationSec * 1000);
         }
 
-        // Event Listeners
+        // Button Listeners
         btnToggleMic.addEventListener('click', () => {
             if (isMicActive) stopMicCapture();
             else startMicCapture();
