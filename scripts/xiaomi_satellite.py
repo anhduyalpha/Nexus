@@ -377,6 +377,9 @@ class XiaomiSatellite:
                                 # Forward volume pulse to Master Web HUD
                                 try:
                                     await ws.send(json.dumps({"type": "volume", "rms": rms}))
+                                except Exception:
+                                    pass
+
                             if triggered:
                                 if self.oww_model:
                                     self.oww_model.reset()
