@@ -56,7 +56,7 @@ class HomeAssistantClient:
                         logger.error(f"Failed to fetch states: HTTP {resp.status}")
                         return []
         except Exception as e:
-            logger.error(f"Error getting states: {e}")
+            logger.debug(f"Home Assistant is offline or unreachable at {self.base_url}: {e}")
             return []
 
     async def get_state(self, entity_id: str) -> Optional[Dict[str, Any]]:
