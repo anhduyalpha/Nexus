@@ -180,64 +180,76 @@ class XiaomiSatellite:
         # Check scrcpy executable
         scrcpy_path = shutil.which("scrcpy")
         if scrcpy_path:
-            logger.info("Starting scrcpy USB live audio stream from Xiaomi mic...")
+            logger.info("Connecting directly to Xiaomi Phone Dual Hardware Mic via ADB Pipe (Zero-Echo)...")
             try:
                 self.scrcpy_proc = subprocess.Popen(
-                    [scrcpy_path, "--no-video", "--audio-source=mic", "--audio-output-buffer=30"],
-                    stdout=subprocess.DEVNULL,
+                    [
+                        scrcpy_path,
+                        "--no-video",
+                        "--audio-source=mic",
+                        "--audio-codec=raw",
+                        "--no-audio-playback",
+                        "--record=-",
+                        "--record-format=wav"
+                    ],
+                    stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL
                 )
-                time.sleep(1.0)
-
-                # 🔇 Mute scrcpy in Windows Volume Mixer (Zero Feedback to Physical Speakers)
-                threading.Thread(target=self._mute_scrcpy_loop, daemon=True).start()
+                # Read 44-byte WAV header
+                if self.scrcpy_proc.stdout:
+                    _ = self.scrcpy_proc.stdout.read(44)
+                logger.info("✅ Xiaomi Hardware Mic stream connected via ADB Pipe!")
             except Exception as e:
-                logger.error(f"Failed to start scrcpy: {e}")
+                logger.error(f"Failed to start scrcpy hardware mic pipe: {e}")
 
-    def _mute_scrcpy_loop(self):
-        """Ensure scrcpy.exe is muted in Windows Audio Mixer so it never echoes to physical speakers."""
-        try:
-            from pycaw.pycaw import AudioUtilities
-            for _ in range(15):
-                sessions = AudioUtilities.GetAllSessions()
-                for session in sessions:
-                    if session.Process and "scrcpy" in session.Process.name().lower():
-                        vol = session.SimpleAudioVolume
-                        vol.SetMute(1, None)
-                        logger.info("🔇 [ZERO-ECHO] scrcpy output muted in Windows Volume Mixer (No sound to speakers)!")
-                        return
-                time.sleep(0.3)
-        except Exception as e:
-            logger.debug(f"pycaw session mute notice: {e}")
+    def read_audio_chunk(self, stream) -> np.ndarray:
+        """Read 16-bit PCM chunk directly from Xiaomi hardware mic pipe or PyAudio fallback."""
+        chunk_bytes = self.chunk_size * 2
+        if self.scrcpy_proc and self.scrcpy_proc.stdout and self.scrcpy_proc.poll() is None:
+            try:
+                raw_bytes = self.scrcpy_proc.stdout.read(chunk_bytes)
+                if raw_bytes:
+                    if len(raw_bytes) % 2 != 0:
+                        raw_bytes = raw_bytes[:len(raw_bytes) - 1]
+                    pcm = np.frombuffer(raw_bytes, dtype=np.int16)
+                    if pcm.size == self.chunk_size:
+                        return pcm
+                    elif pcm.size > 0:
+                        padded = np.zeros(self.chunk_size, dtype=np.int16)
+                        padded[:min(pcm.size, self.chunk_size)] = pcm[:min(pcm.size, self.chunk_size)]
+                        return padded
+            except Exception as e:
+                logger.debug(f"Pipe read error: {e}")
+
+        # Fallback to PyAudio stream if pipe is unavailable
+        if stream is not None:
+            try:
+                data = stream.read(self.chunk_size, exception_on_overflow=False)
+                return np.frombuffer(data, dtype=np.int16)
+            except Exception:
+                pass
+
+        return np.zeros(self.chunk_size, dtype=np.int16)
 
     def get_audio_stream(self):
-        """Open microphone PyAudio stream on Windows."""
+        """Open microphone PyAudio stream on Windows (Fallback endpoint)."""
+        if self.scrcpy_proc and self.scrcpy_proc.poll() is None:
+            return "scrcpy_pipe"
         try:
             import pyaudio
             if self.pa is None:
                 self.pa = pyaudio.PyAudio()
-
-            # Find best input device (Realtek / Stereo Mix / Default)
-            chosen_index = None
-            for i in range(self.pa.get_device_count()):
-                dev = self.pa.get_device_info_by_index(i)
-                name = dev.get("name", "").lower()
-                if dev.get("maxInputChannels", 0) > 0:
-                    if "stereo mix" in name or "realtek" in name or "microphone" in name:
-                        chosen_index = i
-                        logger.info(f"🎙️ Selected Audio Capture Endpoint: [{i}] {dev.get('name')}")
-                        break
 
             return self.pa.open(
                 format=pyaudio.paInt16,
                 channels=1,
                 rate=self.sample_rate,
                 input=True,
-                input_device_index=chosen_index,
                 frames_per_buffer=self.chunk_size
             )
         except Exception as e:
-            logger.error(f"Could not open microphone stream: {e}")
+            logger.debug(f"PyAudio fallback notice: {e}")
+            return None
             return None
 
     def check_wake_word(self, chunk: np.ndarray) -> tuple:
@@ -271,8 +283,7 @@ class XiaomiSatellite:
         start_time = time.time()
 
         while (time.time() - start_time) < max_duration:
-            data = stream.read(self.chunk_size, exception_on_overflow=False)
-            raw_chunk = np.frombuffer(data, dtype=np.int16)
+            raw_chunk = self.read_audio_chunk(stream)
             clean_chunk = self.cleaner.process(raw_chunk)
             frames.append(clean_chunk)
 
@@ -296,8 +307,7 @@ class XiaomiSatellite:
         frames = []
         num_chunks = int((self.sample_rate * duration_sec) / self.chunk_size)
         for _ in range(num_chunks):
-            data = stream.read(self.chunk_size, exception_on_overflow=False)
-            raw_chunk = np.frombuffer(data, dtype=np.int16)
+            raw_chunk = self.read_audio_chunk(stream)
             clean_chunk = self.cleaner.process(raw_chunk)
             frames.append(clean_chunk)
         return np.concatenate(frames) if frames else np.array([], dtype=np.int16)
@@ -374,8 +384,7 @@ class XiaomiSatellite:
                                 await asyncio.sleep(0.1)
                                 continue
 
-                            data = stream.read(self.chunk_size, exception_on_overflow=False)
-                            raw_chunk = np.frombuffer(data, dtype=np.int16)
+                            raw_chunk = self.read_audio_chunk(stream)
                             
                             # Clean noise and maximize amplitude
                             clean_chunk = self.cleaner.process(raw_chunk)
