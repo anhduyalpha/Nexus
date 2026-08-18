@@ -83,11 +83,15 @@ class SettingsUpdateRequest(BaseModel):
 # Routes
 @app.get("/", response_class=HTMLResponse)
 async def get_index(request: Request):
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "config": config,
-        "ha_status": await ha_client.check_connection()
-    })
+    ha_status = await ha_client.check_connection()
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "config": config,
+            "ha_status": ha_status
+        }
+    )
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
