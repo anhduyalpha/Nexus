@@ -60,20 +60,27 @@ class NexusSatellite:
 
         self.oww_model = None
         self.pa = None
-        self._init_wake_word()
 
-    def _init_wake_word(self):
-        """Initialize local openWakeWord on CPU."""
         try:
+            import openwakeword
             from openwakeword.model import Model
-            logger.info(f"Loading openWakeWord model ('{self.wake_model_name}')...")
-            self.oww_model = Model(
-                wakeword_models=[self.wake_model_name] if self.wake_model_name else None,
-                inference_framework="onnx"
-            )
-            logger.info("openWakeWord initialized successfully on Satellite!")
+            try:
+                openwakeword.utils.download_models()
+            except Exception:
+                pass
+            
+            logger.info("Initializing openWakeWord model...")
+            try:
+                if self.wake_model_name and self.wake_model_name not in ["hey_nexus"]:
+                    self.oww_model = Model(wakeword_models=[self.wake_model_name], inference_framework="onnx")
+                else:
+                    self.oww_model = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+            except Exception:
+                self.oww_model = Model(inference_framework="onnx")
+
+            logger.info(f"openWakeWord initialized successfully with models: {list(self.oww_model.models.keys())}!")
         except Exception as e:
-            logger.warning(f"openWakeWord initialization failed ({e}). Satellite will use energy detection.")
+            logger.warning(f"openWakeWord not available ({e}). Using Silero VAD energy mode.")
             self.oww_model = None
 
     def get_audio_stream(self):

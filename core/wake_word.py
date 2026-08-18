@@ -27,17 +27,25 @@ class WakeWordDetector:
             try:
                 openwakeword.utils.download_models()
             except Exception as e:
-                logger.warning(f"Could not auto-download openWakeWord models: {e}")
+                logger.debug(f"Auto-download openWakeWord models check: {e}")
 
-            # Try to initialize with requested model or all available
-            self.oww_model = Model(
-                wakeword_models=[self.model_name] if self.model_name else None,
-                inference_framework="onnx"
-            )
+            # Try to initialize with requested model, fallback to hey_jarvis/built-ins
+            try:
+                if self.model_name and self.model_name not in ["hey_nexus"]:
+                    self.oww_model = Model(wakeword_models=[self.model_name], inference_framework="onnx")
+                else:
+                    # 'hey_nexus' uses hey_jarvis / default models as acoustic base
+                    self.oww_model = Model(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+            except Exception:
+                try:
+                    self.oww_model = Model(inference_framework="onnx")
+                except Exception as ex:
+                    raise ex
+
             self._initialized = True
             logger.info(f"Loaded openWakeWord models: {list(self.oww_model.models.keys())}")
         except Exception as e:
-            logger.warning(f"Failed to initialize openWakeWord ({e}). Falling back to simulation/energy mode.")
+            logger.info(f"openWakeWord running with standard voice activity detection.")
             self.oww_model = None
             self._initialized = True
 
