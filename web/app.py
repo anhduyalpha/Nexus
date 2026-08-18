@@ -208,6 +208,9 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
         while True:
             # Receive either binary audio data or JSON metadata
             message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                logger.info(f"🔴 Satellite disconnected cleanly: {satellite_name}")
+                break
 
             if "bytes" in message and message["bytes"]:
                 raw_bytes = message["bytes"]
@@ -326,7 +329,7 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
                         "result": result
                     })
 
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, RuntimeError):
         logger.info(f"🔴 Satellite disconnected: {satellite_name}")
     except Exception as e:
         logger.error(f"Error in satellite websocket: {e}")
