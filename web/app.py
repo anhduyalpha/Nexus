@@ -218,7 +218,11 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
                     payload = {}
 
                 msg_type = payload.get("type", "")
-                if msg_type == "register":
+                if msg_type == "wake_detected":
+                    logger.info(f"⚡ Instant Wake Triggered from {satellite_name}")
+                    orchestrator.notify_wake_detected(satellite_name)
+
+                elif msg_type == "register":
                     satellite_name = payload.get("name", satellite_name)
                     active_satellites[ws_id] = satellite_name
                     logger.info(f"Satellite registered name: {satellite_name}")

@@ -87,9 +87,12 @@ class SpeechToText:
                 audio_float,
                 language=self.language if self.language != "auto" else None,
                 initial_prompt=initial_prompt,
-                beam_size=5,
+                beam_size=1,
+                best_of=1,
+                temperature=0.0,
+                without_timestamps=True,
                 vad_filter=True,
-                vad_parameters=dict(min_silence_duration_ms=500)
+                vad_parameters=dict(min_silence_duration_ms=250)
             )
 
             text_parts = [segment.text.strip() for segment in segments]

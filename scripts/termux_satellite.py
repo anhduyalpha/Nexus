@@ -327,8 +327,15 @@ class TermuxSatellite:
                                 if self.oww_model:
                                     self.oww_model.reset()
 
-                                # Record full user utterance
-                                audio_np = self.record_phrase(stream)
+                                # ⚡ 1. Send instant wake notification to Master (Loa phát tiếng bíp/chime lập tức)
+                                try:
+                                    await ws.send(json.dumps({"type": "wake_detected", "name": self.satellite_name}))
+                                    logger.info(f"⚡ [INSTANT FEEDBACK] Wake trigger sent to Master Loa!")
+                                except Exception as err:
+                                    logger.warning(f"Could not send instant wake: {err}")
+
+                                # 2. Record full user utterance with low silence delay
+                                audio_np = self.record_phrase(stream, max_duration=8.0)
 
                                 if audio_np.size > 0:
                                     wav_bytes = np_to_wav_bytes(audio_np, self.sample_rate)

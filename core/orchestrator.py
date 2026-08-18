@@ -204,10 +204,16 @@ class VoiceOrchestrator:
         self.set_state(PipelineState.LISTENING_WAKE)
         return result
 
-    async def process_external_audio(self, audio_data: Any, satellite_name: str = "Linux Satellite") -> Dict[str, Any]:
+    def notify_wake_detected(self, satellite_name: str = "Xiaomi Phone"):
+        """Instantly play chime and transition UI to RECORDING as soon as wake word is triggered."""
+        self.set_state(PipelineState.WAKE_DETECTED, {"source": satellite_name})
+        sound_effects.play_wake()
+        self.set_state(PipelineState.RECORDING, {"source": satellite_name})
+
+    async def process_external_audio(self, audio_data: Any, satellite_name: str = "Xiaomi Phone") -> Dict[str, Any]:
         """
-        Process audio streamed from an external satellite (e.g. Linux Laptop mic).
-        Plays chimes and speech through Master's speaker (Windows).
+        Process audio streamed from an external satellite (e.g. Xiaomi Phone mic).
+        Transcribes with GPU Faster-Whisper, reasons with Brain, and speaks on Master Speaker.
         """
         logger.info(f"Received external audio from {satellite_name}")
         
@@ -228,11 +234,7 @@ class VoiceOrchestrator:
         else:
             return {"error": "Invalid audio data format"}
 
-        # 2. Wake detected sound & state on Master Speaker
-        self.set_state(PipelineState.WAKE_DETECTED, {"source": satellite_name})
-        sound_effects.play_wake()
-
-        # 3. Transcribe with Whisper (CUDA GPU)
+        # 2. Transcribe with Whisper (CUDA GPU - Ultra Low Latency)
         self.set_state(PipelineState.TRANSCRIBING, {"source": satellite_name})
         user_text = stt_engine.transcribe(audio_np)
         self.emit_event("transcription", {"text": user_text, "source": satellite_name})
