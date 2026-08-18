@@ -26,7 +26,8 @@ if not exist "%~dp0.env" (
     echo [NOTE] Please edit .env with your HA_TOKEN and API Key!
 )
 
-echo [INFO] Checking for connected Xiaomi USB Phone...
+echo [INFO] Resetting USB tunnels and checking for connected Xiaomi USB Phone...
+adb forward --remove-all > nul 2>&1
 adb devices > temp_adb.txt 2>&1
 findstr /C:"device" temp_adb.txt | findstr /V "List" > nul
 if %errorlevel% == 0 (
