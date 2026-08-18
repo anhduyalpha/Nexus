@@ -85,27 +85,31 @@ body.nexus-theme {
 }
 
 /* Header */
+/* Header */
 .hud-header {
     position: relative;
     z-index: 10;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1rem 2rem;
+    padding: 0.75rem 1.5rem;
     border-bottom: 1px solid var(--border-hud);
-    background: rgba(3, 10, 22, 0.8);
-    backdrop-filter: blur(10px);
+    background: rgba(3, 10, 22, 0.85);
+    backdrop-filter: blur(12px);
+    gap: 1rem;
+    flex-wrap: nowrap;
 }
 
 .hud-brand {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.8rem;
+    flex-shrink: 0;
 }
 
 .brand-hex {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     background: var(--cyan-glow);
     clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
     box-shadow: 0 0 15px var(--cyan-glow);
@@ -119,41 +123,51 @@ body.nexus-theme {
 
 .system-name {
     font-family: var(--font-hud);
-    font-size: 1.5rem;
+    font-size: 1.35rem;
     font-weight: 900;
-    letter-spacing: 4px;
+    letter-spacing: 3px;
     color: var(--cyan-glow);
     text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
     display: block;
+    line-height: 1.1;
 }
 
 .system-sub {
     font-family: var(--font-tech);
-    font-size: 0.75rem;
-    letter-spacing: 2px;
+    font-size: 0.7rem;
+    letter-spacing: 1.5px;
     color: var(--text-secondary);
 }
 
 .hud-stats {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
+    gap: 0.6rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
 }
 
 .stat-item {
     font-family: var(--font-tech);
-    font-size: 0.85rem;
-    display: flex;
-    gap: 0.4rem;
+    font-size: 0.78rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    background: rgba(0, 240, 255, 0.04);
+    border: 1px solid rgba(0, 240, 255, 0.12);
+    padding: 3px 8px;
+    border-radius: 4px;
 }
 
 .stat-label {
     color: var(--text-secondary);
+    font-weight: 600;
 }
 
 .stat-value {
     color: var(--text-primary);
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .text-glow-cyan {
@@ -166,14 +180,29 @@ body.nexus-theme {
     text-shadow: 0 0 8px rgba(255, 183, 3, 0.6);
 }
 
+.text-glow-green {
+    color: var(--green-glow);
+    text-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+}
+
+.hud-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-shrink: 0;
+}
+
 .btn-hud-icon {
     background: var(--cyan-dim);
     border: 1px solid var(--border-hud);
     color: var(--cyan-glow);
-    padding: 0.5rem;
+    padding: 0.45rem;
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn-hud-icon:hover {
