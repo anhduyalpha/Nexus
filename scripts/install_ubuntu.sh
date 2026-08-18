@@ -39,6 +39,8 @@ source "$VENV_DIR/bin/activate"
 echo "[3/4] Installing Python requirements..."
 pip install --upgrade pip setuptools wheel
 pip install -r "$PROJECT_DIR/requirements.txt"
+# Install openWakeWord with --no-deps to bypass deprecated tflite-runtime on Python 3.12+ (uses onnxruntime)
+pip install --no-deps "openwakeword>=0.6.0"
 
 # 4. Generate Chimes and Initialize .env
 echo "[4/4] Generating Nexus sound effects and preparing .env..."
