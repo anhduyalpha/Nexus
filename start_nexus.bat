@@ -26,6 +26,18 @@ if not exist "%~dp0.env" (
     echo [NOTE] Please edit .env with your HA_TOKEN and API Key!
 )
 
+echo [INFO] Checking for connected Xiaomi USB Phone...
+adb devices > temp_adb.txt 2>&1
+findstr /C:"device" temp_adb.txt | findstr /V "List" > nul
+if %errorlevel% == 0 (
+    echo [INFO] Detected Xiaomi Phone on USB! Starting Xiaomi Microphone Satellite in companion window...
+    start "NEXUS - Xiaomi USB Mic" cmd /c "%~dp0scripts\start_xiaomi_mic.bat"
+) else (
+    echo [NOTE] Xiaomi Phone not connected or ADB not ready. Master will listen for LAN satellites.
+)
+del temp_adb.txt > nul 2>&1
+
+echo.
 echo [INFO] Starting Nexus Master Server...
 echo [INFO] Web Dashboard: http://localhost:8080
 echo [INFO] Satellite WS:  ws://localhost:8080/ws/satellite

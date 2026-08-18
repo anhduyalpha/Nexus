@@ -149,42 +149,37 @@
         </section>
     </main>
 
-    <!-- Microphone & STT Diagnostic Modal -->
+    <!-- Microphone Diagnostic Modal -->
     <div class="hud-modal" id="modal-mic-test">
         <div class="modal-backdrop"></div>
-        <div class="modal-content modal-lg">
+        <div class="modal-content">
             <div class="modal-header">
-                <h3>// DIAGNOSTIC // TEST MICROPHONE VỆ TINH (LINUX SERVER)</h3>
+                <h3>// CHẨN ĐOÁN MICROPHONE (XIAOMI USB / LINUX SERVER)</h3>
                 <button class="btn-close-modal" id="btn-close-mic-test">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="mic-test-panel">
-                    <div class="mic-meter-wrapper">
-                        <div class="mic-meter-label">
-                            <span>CƯỜNG ĐỘ ÂM THANH TỪ SERVER (LIVE VOLUME):</span>
-                            <span id="mic-live-db" class="text-glow-cyan">0% (Đang lắng nghe)</span>
-                        </div>
-                        <div class="mic-meter-bar-bg">
-                            <div class="mic-meter-bar-fill" id="mic-meter-bar" style="width: 0%;"></div>
-                        </div>
-                        <div class="mic-meter-scale">
-                            <span>Yếu (0%)</span>
-                            <span>Bình thường (40%)</span>
-                            <span>Tốt (70%)</span>
-                            <span>Quá lớn (100%)</span>
-                        </div>
-                    </div>
+                <div class="mic-test-container">
+                    <p class="text-dim" style="font-size: 0.9rem; margin-bottom: 1rem;">
+                        Kiểm tra tín hiệu âm lượng thời gian thực từ <strong>Điện thoại Xiaomi Redmi Note 8 Pro (USB)</strong> hoặc <strong>Microphone Vệ Tinh</strong> gửi về máy Windows.
+                    </p>
 
-                    <div class="mic-waveform-box">
-                        <canvas id="mic-test-canvas" width="520" height="80"></canvas>
+                    <div class="mic-meter-box">
+                        <div class="meter-label">
+                            <span>TÍN HIỆU ÂM LƯỢNG MICRO THỜI GIAN THỰC (LIVE VU METER):</span>
+                            <span class="live-db text-glow-cyan" id="mic-live-db">0% (Đang kết nối...)</span>
+                        </div>
+                        <div class="meter-bar-track">
+                            <div class="meter-bar-fill" id="mic-meter-bar" style="width: 0%;"></div>
+                        </div>
+                        <canvas id="mic-test-canvas" width="400" height="40" style="width: 100%; height: 40px; margin-top: 8px; border-radius: 4px; background: rgba(0, 10, 20, 0.4);"></canvas>
                     </div>
 
                     <div class="mic-test-actions">
                         <button type="button" class="btn-hud-primary" id="btn-mic-record-test">
-                            <span class="btn-icon">🎙️</span> YÊU CẦU SERVER THU ÂM (5 GIÂY)
+                            <span class="btn-icon">🎙️</span> YÊU CẦU THU ÂM THỬ NGHIỆM (5 GIÂY)
                         </button>
                         <button type="button" class="btn-hud-secondary" id="btn-mic-play-test" disabled>
-                            <span class="btn-icon">▶️</span> NGHE LẠI ÂM THANH TỪ SERVER
+                            <span class="btn-icon">▶️</span> NGHE LẠI ÂM THANH QUA LOA MÁY TÍNH
                         </button>
                     </div>
 
@@ -194,7 +189,7 @@
                             <span class="stt-status text-glow-cyan" id="mic-stt-status">CHỜ LỆNH THU ÂM...</span>
                         </div>
                         <div class="stt-result-content" id="mic-stt-result">
-                            <em>(Bấm nút "Yêu Cầu Server Thu Âm", sau đó nói vào Micro của Server Linux. GPU trên máy Windows sẽ dịch văn bản và phát âm thanh lại cho bạn kiểm tra)</em>
+                            <em>(Bấm nút "Yêu Cầu Thu Âm Thử Nghiệm", sau đó nói vào Micro của Điện thoại Xiaomi hoặc Server. GPU trên máy Windows sẽ dịch văn bản và phát âm thanh lại cho bạn kiểm tra)</em>
                         </div>
                     </div>
                 </div>
