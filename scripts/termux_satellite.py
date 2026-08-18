@@ -1,15 +1,13 @@
-#!/usr/bin/env python3
+#!/data/data/com.termux/files/usr/bin/python3
 """
-NEXUS SMART HOME - XIAOMI PHONE USB MICROPHONE SATELLITE
-=========================================================
-Runs on Windows PC with rooted Xiaomi Redmi Note 8 Pro connected via USB cable.
-- Auto-detects Xiaomi ADB device (a6cmozini7mncugi).
-- Captures crystal-clear audio from Xiaomi's dual noise-cancelling hardware mics.
-- Real-time AudioCleaner (High-Pass 80Hz + Dynamic Peak Normalizer up to 25x).
-- Listens for "Hey Nexus" via openWakeWord with Ultra Sensitivity (0.10).
-- Streams spoken voice commands over WebSocket (ws://localhost:8080/ws/satellite)
-  to Windows Faster-Whisper GPU & AI Brain.
-- Supports Web HUD Live VU Meter & On-Demand 5-second Diagnostic Test Recording.
+NEXUS SMART HOME - TERMUX SATELLITE (XIAOMI ANDROID CLIENT)
+============================================================
+Runs natively inside Termux on Xiaomi Redmi Note 8 Pro.
+- Zero audio feedback loop / Zero echo (Audio never routed to Windows speakers).
+- Auto-pauses recording when Master Windows is speaking (AEC / Self-hearing prevention).
+- High-Pass 80Hz filter + Dynamic Peak Normalizer (95% full scale).
+- Listens for 'Hey Nexus' / 'Hey Jarvis' with openWakeWord (or energy VAD).
+- Streams clean 16kHz voice commands directly to Windows GPU Master over ADB/WiFi.
 """
 
 import sys
@@ -22,19 +20,15 @@ import argparse
 import asyncio
 import logging
 import wave
-import shutil
-import subprocess
-import threading
 import numpy as np
 import websockets
-from pathlib import Path
 
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] (%(name)s) %(message)s"
 )
-logger = logging.getLogger("XiaomiSatellite")
+logger = logging.getLogger("TermuxSatellite")
 
 def np_to_wav_bytes(audio_np: np.ndarray, sample_rate: int = 16000) -> bytes:
     """Convert numpy int16 PCM array to WAV bytes in memory."""
@@ -57,7 +51,7 @@ def draw_vu_bar(rms: float, max_score: float = 0.0, threshold: float = 0.10, bar
 class AudioCleaner:
     """High-performance audio noise suppression, high-pass filter, and dynamic peak normalizer."""
 
-    def __init__(self, sample_rate: int = 16000, gain: float = 10.0, noise_suppression: bool = True):
+    def __init__(self, sample_rate: int = 16000, gain: float = 8.0, noise_suppression: bool = True):
         self.sample_rate = sample_rate
         self.gain = gain
         self.noise_suppression = noise_suppression
@@ -99,10 +93,10 @@ class AudioCleaner:
         current_rms = float(np.sqrt(np.mean(filtered ** 2) + 1e-9))
         self.noise_floor = (1 - self.noise_alpha) * self.noise_floor + self.noise_alpha * min(self.noise_floor * 1.5, current_rms)
 
-        # 3. Dynamic Peak Normalization (Maximize to ~92% amplitude without clipping)
+        # 3. Dynamic Peak Normalization (Maximize to ~90% amplitude without clipping)
         peak = float(np.max(np.abs(filtered)))
         if peak > 0.001:
-            target_boost = min(25.0, 0.92 / peak)
+            target_boost = min(20.0, 0.90 / peak)
             amplified = np.tanh(filtered * target_boost)
         else:
             amplified = np.tanh(filtered * self.gain)
@@ -111,16 +105,16 @@ class AudioCleaner:
         clean_int16 = (amplified * 32767.0).astype(np.int16)
         return clean_int16
 
-class XiaomiSatellite:
-    """Xiaomi USB Microphone Satellite with openWakeWord and WebSocket streaming."""
+class TermuxSatellite:
+    """Termux Android Satellite client."""
 
     def __init__(
         self,
-        server_url: str = "ws://localhost:8080/ws/satellite",
-        satellite_name: str = "Xiaomi Redmi Note 8 Pro (USB)",
+        server_url: str = "ws://127.0.0.1:8080/ws/satellite",
+        satellite_name: str = "Xiaomi Redmi Note 8 Pro (Termux)",
         wake_model: str = "hey_nexus",
         wake_threshold: float = 0.10,
-        gain: float = 10.0,
+        gain: float = 8.0,
         silence_limit: float = 1.2,
         sample_rate: int = 16000
     ):
@@ -138,18 +132,11 @@ class XiaomiSatellite:
         self.pa = None
         self.is_test_recording = False
         self.is_master_speaking = False
-        self.scrcpy_proc = None
 
-        # Initialize openWakeWord
+        # Initialize openWakeWord if available
         try:
             import openwakeword
             from openwakeword.model import Model
-            try:
-                openwakeword.utils.download_models()
-            except Exception:
-                pass
-            
-            logger.info("Initializing openWakeWord model...")
             try:
                 if self.wake_model_name and self.wake_model_name not in ["hey_nexus"]:
                     self.oww_model = Model(wakeword_models=[self.wake_model_name], inference_framework="onnx")
@@ -158,71 +145,31 @@ class XiaomiSatellite:
             except Exception:
                 self.oww_model = Model(inference_framework="onnx")
 
-            logger.info(f"openWakeWord initialized with models: {list(self.oww_model.models.keys())} (ULTRA SENSITIVITY: {self.wake_threshold})")
+            logger.info(f"openWakeWord initialized on Android: {list(self.oww_model.models.keys())} (Threshold: {self.wake_threshold})")
         except Exception as e:
-            logger.warning(f"openWakeWord not available ({e}). Using voice activity energy mode.")
+            logger.info(f"Using Voice Activity Energy Mode ({e})")
             self.oww_model = None
 
-    def start_scrcpy_audio_bridge(self):
-        """Ensure ADB device is connected and launch scrcpy audio capture bridge without speaker feedback."""
-        logger.info("Checking ADB devices...")
-        try:
-            out = subprocess.check_output(["adb", "devices"], text=True)
-            if "device" not in out or len(out.strip().split("\n")) <= 1:
-                logger.warning("No ADB devices found! Please connect Xiaomi phone with USB Debugging enabled.")
-            else:
-                logger.info("✅ Xiaomi phone detected via ADB USB!")
-                # Ensure audio permissions
-                subprocess.run(["adb", "shell", "su", "-c", "pm grant com.android.shell android.permission.RECORD_AUDIO 2>/dev/null"], capture_output=True)
-        except Exception as e:
-            logger.warning(f"ADB check failed: {e}")
-
-        # Check scrcpy executable
-        scrcpy_path = shutil.which("scrcpy")
-        if scrcpy_path:
-            logger.info(f"Starting scrcpy USB audio capture bridge (Zero-Echo: --no-audio-playback)...")
-            try:
-                self.scrcpy_proc = subprocess.Popen(
-                    [scrcpy_path, "--no-video", "--audio-source=mic", "--no-audio-playback"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-                time.sleep(1.0)
-            except Exception as e:
-                logger.error(f"Failed to start scrcpy: {e}")
-
     def get_audio_stream(self):
-        """Open microphone PyAudio stream on Windows."""
+        """Open microphone PyAudio stream on Android."""
         try:
             import pyaudio
             if self.pa is None:
                 self.pa = pyaudio.PyAudio()
-
-            # Find best input device (Realtek / Stereo Mix / Default)
-            chosen_index = None
-            for i in range(self.pa.get_device_count()):
-                dev = self.pa.get_device_info_by_index(i)
-                name = dev.get("name", "").lower()
-                if dev.get("maxInputChannels", 0) > 0:
-                    if "realtek" in name or "microphone" in name or "stereo mix" in name:
-                        chosen_index = i
-                        logger.info(f"🎙️ Selected Windows Audio Input: [{i}] {dev.get('name')}")
-                        break
 
             return self.pa.open(
                 format=pyaudio.paInt16,
                 channels=1,
                 rate=self.sample_rate,
                 input=True,
-                input_device_index=chosen_index,
                 frames_per_buffer=self.chunk_size
             )
         except Exception as e:
-            logger.error(f"Could not open microphone stream: {e}")
+            logger.error(f"Could not open microphone stream on Android: {e}")
             return None
 
     def check_wake_word(self, chunk: np.ndarray) -> tuple:
-        """Check if wake word is detected in the audio chunk. Returns (is_triggered, max_score)."""
+        """Check if wake word is detected in the audio chunk."""
         max_score = 0.0
         if self.oww_model is not None:
             try:
@@ -241,7 +188,7 @@ class XiaomiSatellite:
         """Ultra-sensitive energy-based voice activity detection."""
         audio_float = chunk.astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(audio_float ** 2)))
-        return rms > 0.005
+        return rms > 0.006
 
     def record_phrase(self, stream, max_duration: float = 12.0) -> np.ndarray:
         """Record spoken command after wake word until silence is detected."""
@@ -295,7 +242,6 @@ class XiaomiSatellite:
                         logger.info(f"\n📢 Received command from Master: Test Record for {duration}s")
                         self.is_test_recording = True
                         
-                        # Run recording
                         audio_np = self.record_fixed_duration(stream, duration)
                         self.is_test_recording = False
                         
@@ -318,12 +264,9 @@ class XiaomiSatellite:
             logger.warning(f"Receiver task stopped: {e}")
 
     async def run(self):
-        """Main satellite loop: auto-reconnect to Windows Master over WebSocket."""
-        self.start_scrcpy_audio_bridge()
-
-        logger.info(f"Starting Xiaomi USB Satellite '{self.satellite_name}'")
-        logger.info(f"Peak Normalizer: ACTIVE (Max 25x Boost) | Ultra Sensitivity: {self.wake_threshold}")
-        logger.info(f"Target Master Server: {self.server_url}")
+        """Main satellite loop: connect to Windows Master over WebSocket."""
+        logger.info(f"Starting Xiaomi Termux Satellite '{self.satellite_name}'")
+        logger.info(f"Target Master: {self.server_url}")
 
         while True:
             try:
@@ -345,7 +288,7 @@ class XiaomiSatellite:
                     receiver_coro = asyncio.create_task(self._receiver_task(ws, stream))
 
                     print("\n" + "=" * 65)
-                    print(" 📱 ĐANG LẮNG NGHE QUA MICROPHONE ĐIỆN THOẠI XIAOMI (USB):")
+                    print(" 📱 ĐANG LẮNG NGHE QUA MICROPHONE ĐIỆN THOẠI XIAOMI (TERMUX):")
                     print("=" * 65)
                     frame_counter = 0
 
@@ -415,64 +358,45 @@ class XiaomiSatellite:
                 await asyncio.sleep(3)
 
 def main():
-    try:
-        sys.stdout.reconfigure(encoding='utf-8')
-    except Exception:
-        pass
-
-    parser = argparse.ArgumentParser(description="NEXUS Xiaomi Phone USB Microphone Satellite")
+    parser = argparse.ArgumentParser(description="NEXUS Xiaomi Termux Satellite")
     parser.add_argument(
         "--server",
         type=str,
-        default=os.getenv("SATELLITE_SERVER_URL", "ws://localhost:8080/ws/satellite"),
-        help="WebSocket URL of Nexus Master (e.g. ws://localhost:8080/ws/satellite)"
+        default=os.getenv("SATELLITE_SERVER_URL", "ws://127.0.0.1:8080/ws/satellite"),
+        help="WebSocket URL of Nexus Master (default: ws://127.0.0.1:8080/ws/satellite)"
     )
     parser.add_argument(
         "--name",
         type=str,
-        default=os.getenv("SATELLITE_NAME", "Xiaomi Redmi Note 8 Pro (USB)"),
+        default=os.getenv("SATELLITE_NAME", "Xiaomi Redmi Note 8 Pro (Termux)"),
         help="Name identifier for this satellite"
     )
     parser.add_argument(
         "--threshold",
         type=float,
         default=float(os.getenv("WAKE_WORD_THRESHOLD", "0.10")),
-        help="Wake word detection threshold (default: 0.10 for ULTRA SENSITIVITY)"
+        help="Wake word detection threshold"
     )
     parser.add_argument(
         "--gain",
         type=float,
-        default=float(os.getenv("AUDIO_GAIN", "10.0")),
-        help="Software pre-amp volume multiplier (default: 10.0x boost)"
-    )
-    parser.add_argument(
-        "--silence",
-        type=float,
-        default=float(os.getenv("SILENCE_DURATION_SEC", "1.2")),
-        help="Silence duration before stopping recording (seconds)"
+        default=float(os.getenv("AUDIO_GAIN", "8.0")),
+        help="Software pre-amp volume multiplier"
     )
 
     args = parser.parse_args()
 
-    # Ensure URL points to /ws/satellite
-    server_url = args.server
-    if not server_url.startswith("ws://") and not server_url.startswith("wss://"):
-        server_url = f"ws://{server_url}"
-    if not server_url.endswith("/ws/satellite"):
-        server_url = f"{server_url.rstrip('/')}/ws/satellite"
-
-    satellite = XiaomiSatellite(
-        server_url=server_url,
+    satellite = TermuxSatellite(
+        server_url=args.server,
         satellite_name=args.name,
         wake_threshold=args.threshold,
-        gain=args.gain,
-        silence_limit=args.silence
+        gain=args.gain
     )
 
     try:
         asyncio.run(satellite.run())
     except KeyboardInterrupt:
-        print("\n[!] Xiaomi Satellite stopped by user.")
+        print("\n[!] Satellite stopped by user.")
 
 if __name__ == "__main__":
     main()

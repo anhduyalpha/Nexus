@@ -139,6 +139,19 @@ async def websocket_endpoint(websocket: WebSocket):
 active_satellites: Dict[str, str] = {}
 connected_satellite_sockets: Dict[str, WebSocket] = {}
 
+async def broadcast_speaker_status(active: bool):
+    """Notify all connected satellites and Web HUD when TTS speaker starts/stops."""
+    for ip, ws in list(connected_satellite_sockets.items()):
+        try:
+            await ws.send_json({"type": "speaker_status", "active": active})
+        except Exception:
+            pass
+    try:
+        await manager.broadcast({"type": "speaker_status", "active": active})
+    except Exception:
+        pass
+
+
 @app.websocket("/ws/satellite")
 async def satellite_websocket_endpoint(websocket: WebSocket):
     """

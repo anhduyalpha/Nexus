@@ -38,12 +38,19 @@ class TextToSpeech:
         return audio_stream.getvalue()
 
     async def speak(self, text: str):
-        """Synthesize text and play it through the speakers."""
+        """Synthesize text and play it through the speakers with self-listening prevention."""
         if not text or not text.strip():
             return
 
         clean_text = text.strip()
         logger.info(f"Nexus Speaking: '{clean_text}'")
+
+        # Notify satellites to mute during speaker output (prevents infinite echo loops)
+        try:
+            from web.app import broadcast_speaker_status
+            await broadcast_speaker_status(True)
+        except Exception:
+            pass
 
         try:
             audio_bytes = await self.synthesize_to_bytes(clean_text)
@@ -91,5 +98,13 @@ class TextToSpeech:
                             pass
         except Exception as e:
             logger.error(f"TTS synthesis/playback error: {e}")
+        finally:
+            # Grace period after speech before resuming wake word listening
+            await asyncio.sleep(0.6)
+            try:
+                from web.app import broadcast_speaker_status
+                await broadcast_speaker_status(False)
+            except Exception:
+                pass
 
 tts_engine = TextToSpeech()
