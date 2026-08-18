@@ -137,6 +137,7 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 active_satellites: Dict[str, str] = {}
+connected_satellite_sockets: Dict[str, WebSocket] = {}
 
 @app.websocket("/ws/satellite")
 async def satellite_websocket_endpoint(websocket: WebSocket):
@@ -148,6 +149,7 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
     client_ip = websocket.client.host if websocket.client else "LAN"
     satellite_name = f"Linux Satellite ({client_ip})"
     active_satellites[client_ip] = satellite_name
+    connected_satellite_sockets[client_ip] = websocket
     logger.info(f"🟢 New Satellite connected: {satellite_name}")
 
     # Broadcast to Web HUD
@@ -198,6 +200,44 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
                     })
                     await websocket.send_json({"type": "registered", "name": satellite_name})
 
+                elif msg_type == "volume":
+                    rms = payload.get("rms", 0.0)
+                    # Forward to Web HUD
+                    await manager.broadcast({
+                        "type": "satellite_audio_level",
+                        "rms": rms,
+                        "name": satellite_name
+                    })
+
+                elif msg_type == "test_audio_result":
+                    import base64
+                    import soundfile as sf
+                    b64_str = payload.get("audio_b64", "")
+                    raw_bytes = base64.b64decode(b64_str)
+                    
+                    # Save test audio for web playback
+                    test_sound_path = STATIC_DIR / "sounds" / "satellite_test.wav"
+                    test_sound_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(test_sound_path, "wb") as f:
+                        f.write(raw_bytes)
+
+                    # Transcribe using Faster-Whisper GPU
+                    try:
+                        data, samplerate = sf.read(io.BytesIO(raw_bytes), dtype='int16')
+                        if len(data.shape) > 1:
+                            data = data.mean(axis=1).astype(np.int16)
+                        text = stt_engine.transcribe(data, sample_rate=samplerate)
+                    except Exception as ex:
+                        logger.error(f"Error transcribing test audio: {ex}")
+                        text = f"(Lỗi STT: {ex})"
+
+                    logger.info(f"🎤 Satellite Test STT Result: '{text}'")
+                    await manager.broadcast({
+                        "type": "satellite_test_result",
+                        "text": text,
+                        "audio_url": f"/static/sounds/satellite_test.wav?t={int(time.time())}"
+                    })
+
                 elif msg_type == "ping":
                     await websocket.send_json({"type": "pong", "time": time.time()})
 
@@ -218,12 +258,27 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
         logger.error(f"Error in satellite websocket: {e}")
     finally:
         active_satellites.pop(client_ip, None)
+        connected_satellite_sockets.pop(client_ip, None)
         await manager.broadcast({
             "type": "satellite_status",
             "connected": len(active_satellites) > 0,
             "name": list(active_satellites.values())[0] if active_satellites else "None",
             "total_satellites": len(active_satellites)
         })
+
+@app.post("/api/satellite/test")
+async def api_satellite_test_trigger():
+    """Trigger remote diagnostic recording on all connected satellites."""
+    if not connected_satellite_sockets:
+        return JSONResponse({"status": "error", "message": "Chưa có Microphone vệ tinh nào kết nối!"}, status_code=400)
+
+    for client_ip, ws in list(connected_satellite_sockets.items()):
+        try:
+            await ws.send_json({"type": "trigger_test_record", "duration": 5.0})
+        except Exception as e:
+            logger.warning(f"Failed to send test command to satellite {client_ip}: {e}")
+
+    return {"status": "ok", "message": "Đã gửi lệnh thu âm 5 giây tới Linux Satellite."}
 
 @app.post("/api/satellite/audio")
 async def api_satellite_audio(request: Request):

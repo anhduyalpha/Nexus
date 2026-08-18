@@ -4,15 +4,18 @@ NEXUS SMART HOME - DISTRIBUTED MICROPHONE SATELLITE (LINUX CLIENT)
 ==================================================================
 Runs on Linux Laptop / Raspberry Pi / Ubuntu Server.
 - Listens continuously for "Hey Nexus" on local microphone.
-- Records the spoken voice command with VAD.
-- Streams the audio payload over WebSocket to Windows GPU Master.
-- Master PC runs Faster-Whisper (CUDA), Gemini/Ollama, and plays output on Master Speakers.
+- Streams live RMS volume telemetry to Windows Master for real-time VU meter.
+- Supports on-demand remote mic test from the Windows Web HUD.
+- Records spoken voice commands and streams audio over WebSocket to Windows GPU Master.
+- Master PC runs Faster-Whisper (CUDA), Ollama / Gemini, and speaks via Master Loa/Speakers.
 """
 
 import sys
 import time
 import io
 import os
+import json
+import base64
 import argparse
 import asyncio
 import logging
@@ -39,14 +42,14 @@ def np_to_wav_bytes(audio_np: np.ndarray, sample_rate: int = 16000) -> bytes:
     return wav_io.getvalue()
 
 class NexusSatellite:
-    """Microphone satellite client with local wake word detection and LAN WebSocket streaming."""
+    """Microphone satellite client with local wake word detection, live telemetry, and LAN WebSocket streaming."""
 
     def __init__(
         self,
         server_url: str,
         satellite_name: str = "Linux Satellite Mic",
         wake_model: str = "hey_nexus",
-        wake_threshold: float = 0.5,
+        wake_threshold: float = 0.45,
         silence_limit: float = 1.2,
         sample_rate: int = 16000
     ):
@@ -60,6 +63,8 @@ class NexusSatellite:
 
         self.oww_model = None
         self.pa = None
+        self.is_test_recording = False
+        self.stream = None
 
         try:
             import openwakeword
@@ -80,7 +85,7 @@ class NexusSatellite:
 
             logger.info(f"openWakeWord initialized successfully with models: {list(self.oww_model.models.keys())}!")
         except Exception as e:
-            logger.warning(f"openWakeWord not available ({e}). Using Silero VAD energy mode.")
+            logger.warning(f"openWakeWord not available ({e}). Using voice activity energy mode.")
             self.oww_model = None
 
     def get_audio_stream(self):
@@ -146,6 +151,49 @@ class NexusSatellite:
             return np.concatenate(frames)
         return np.array([], dtype=np.int16)
 
+    def record_fixed_duration(self, stream, duration_sec: float = 5.0) -> np.ndarray:
+        """Record a fixed duration clip for diagnostics."""
+        logger.info(f"🎙️ Diagnostic recording in progress ({duration_sec}s)...")
+        frames = []
+        num_chunks = int((self.sample_rate * duration_sec) / self.chunk_size)
+        for _ in range(num_chunks):
+            data = stream.read(self.chunk_size, exception_on_overflow=False)
+            chunk = np.frombuffer(data, dtype=np.int16)
+            frames.append(chunk)
+        return np.concatenate(frames) if frames else np.array([], dtype=np.int16)
+
+    async def _receiver_task(self, ws, stream):
+        """Listen for server-side diagnostic and control messages."""
+        try:
+            async for raw_msg in ws:
+                try:
+                    payload = json.loads(raw_msg)
+                    msg_type = payload.get("type", "")
+                    if msg_type == "trigger_test_record":
+                        duration = float(payload.get("duration", 5.0))
+                        logger.info(f"📢 Received command from Master: Test Record for {duration}s")
+                        self.is_test_recording = True
+                        
+                        # Run recording
+                        audio_np = self.record_fixed_duration(stream, duration)
+                        self.is_test_recording = False
+                        
+                        if audio_np.size > 0:
+                            wav_bytes = np_to_wav_bytes(audio_np, self.sample_rate)
+                            b64_audio = base64.b64encode(wav_bytes).decode('utf-8')
+                            await ws.send(json.dumps({
+                                "type": "test_audio_result",
+                                "audio_b64": b64_audio,
+                                "name": self.satellite_name
+                            }))
+                            logger.info(f"📤 Sent {len(wav_bytes)} bytes of test audio to Master!")
+                except Exception as e:
+                    logger.error(f"Error handling message from Master: {e}")
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.warning(f"Receiver task stopped: {e}")
+
     async def run(self):
         """Main satellite loop: auto-reconnect to Windows Master over WebSocket."""
         logger.info(f"Starting Nexus Satellite '{self.satellite_name}'")
@@ -158,7 +206,7 @@ class NexusSatellite:
                     logger.info("✅ Connected to Nexus Master successfully!")
                     
                     # Register satellite
-                    await ws.send(f'{{"type": "register", "name": "{self.satellite_name}"}}')
+                    await ws.send(json.dumps({"type": "register", "name": self.satellite_name}))
 
                     # Open microphone
                     stream = self.get_audio_stream()
@@ -167,36 +215,58 @@ class NexusSatellite:
                         await asyncio.sleep(5)
                         continue
 
+                    # Start background receiver for remote commands
+                    receiver_coro = asyncio.create_task(self._receiver_task(ws, stream))
+
                     logger.info("👂 Listening for 'Hey Nexus' on local microphone...")
+                    frame_counter = 0
 
-                    while True:
-                        data = stream.read(self.chunk_size, exception_on_overflow=False)
-                        chunk = np.frombuffer(data, dtype=np.int16)
+                    try:
+                        while True:
+                            if self.is_test_recording:
+                                await asyncio.sleep(0.1)
+                                continue
 
-                        if self.check_wake_word(chunk):
-                            if self.oww_model:
-                                self.oww_model.reset()
+                            data = stream.read(self.chunk_size, exception_on_overflow=False)
+                            chunk = np.frombuffer(data, dtype=np.int16)
 
-                            # Record full user utterance
-                            audio_np = self.record_phrase(stream)
-
-                            if audio_np.size > 0:
-                                wav_bytes = np_to_wav_bytes(audio_np, self.sample_rate)
-                                logger.info(f"📤 Streaming {len(wav_bytes)} bytes of audio to Windows Master...")
-                                
-                                # Send binary WAV audio to Master
-                                await ws.send(wav_bytes)
-
-                                # Wait for result confirmation
+                            # Send live volume pulse every 3 frames (~240ms)
+                            frame_counter += 1
+                            if frame_counter % 3 == 0:
+                                audio_float = chunk.astype(np.float32) / 32768.0
+                                rms = float(np.sqrt(np.mean(audio_float ** 2)))
                                 try:
-                                    resp = await asyncio.wait_for(ws.recv(), timeout=15.0)
-                                    logger.info(f"📥 Master Response: {resp}")
-                                except asyncio.TimeoutError:
-                                    logger.warning("Timeout waiting for Master processing response.")
+                                    await ws.send(json.dumps({"type": "volume", "rms": rms}))
+                                except Exception:
+                                    pass
 
-                            logger.info("👂 Resuming wake word listening...")
+                            # Check Wake Word
+                            if self.check_wake_word(chunk):
+                                if self.oww_model:
+                                    self.oww_model.reset()
 
-                        await asyncio.sleep(0.001)
+                                # Record full user utterance
+                                audio_np = self.record_phrase(stream)
+
+                                if audio_np.size > 0:
+                                    wav_bytes = np_to_wav_bytes(audio_np, self.sample_rate)
+                                    logger.info(f"📤 Streaming {len(wav_bytes)} bytes of audio to Windows Master...")
+                                    
+                                    # Send binary WAV audio to Master
+                                    await ws.send(wav_bytes)
+
+                                    # Wait for result confirmation
+                                    try:
+                                        resp = await asyncio.wait_for(ws.recv(), timeout=15.0)
+                                        logger.info(f"📥 Master Response: {resp}")
+                                    except asyncio.TimeoutError:
+                                        logger.warning("Timeout waiting for Master processing response.")
+
+                                logger.info("👂 Resuming wake word listening...")
+
+                            await asyncio.sleep(0.001)
+                    finally:
+                        receiver_coro.cancel()
 
             except (websockets.exceptions.ConnectionClosedError, websockets.exceptions.WebSocketException, OSError) as e:
                 logger.warning(f"Connection to Master lost or unavailable ({e}). Reconnecting in 3s...")
@@ -222,7 +292,7 @@ def main():
     parser.add_argument(
         "--threshold",
         type=float,
-        default=float(os.getenv("WAKE_WORD_THRESHOLD", "0.5")),
+        default=float(os.getenv("WAKE_WORD_THRESHOLD", "0.45")),
         help="Wake word detection threshold (0.1 - 0.9)"
     )
     parser.add_argument(

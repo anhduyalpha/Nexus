@@ -154,15 +154,15 @@
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-lg">
             <div class="modal-header">
-                <h3>// DIAGNOSTIC // TEST MICROPHONE & WHISPER GPU</h3>
+                <h3>// DIAGNOSTIC // TEST MICROPHONE VỆ TINH (LINUX SERVER)</h3>
                 <button class="btn-close-modal" id="btn-close-mic-test">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="mic-test-panel">
                     <div class="mic-meter-wrapper">
                         <div class="mic-meter-label">
-                            <span>CƯỜNG ĐỘ ÂM THANH (LIVE VOLUME):</span>
-                            <span id="mic-live-db" class="text-glow-cyan">0% (Đang chờ bật mic)</span>
+                            <span>CƯỜNG ĐỘ ÂM THANH TỪ SERVER (LIVE VOLUME):</span>
+                            <span id="mic-live-db" class="text-glow-cyan">0% (Đang lắng nghe)</span>
                         </div>
                         <div class="mic-meter-bar-bg">
                             <div class="mic-meter-bar-fill" id="mic-meter-bar" style="width: 0%;"></div>
@@ -181,20 +181,20 @@
 
                     <div class="mic-test-actions">
                         <button type="button" class="btn-hud-primary" id="btn-mic-record-test">
-                            <span class="btn-icon">🎙️</span> BẬT MIC & THU ÂM (5 GIÂY)
+                            <span class="btn-icon">🎙️</span> YÊU CẦU SERVER THU ÂM (5 GIÂY)
                         </button>
                         <button type="button" class="btn-hud-secondary" id="btn-mic-play-test" disabled>
-                            <span class="btn-icon">▶️</span> NGHE LẠI ÂM THANH
+                            <span class="btn-icon">▶️</span> NGHE LẠI ÂM THANH TỪ SERVER
                         </button>
                     </div>
 
                     <div class="mic-stt-box">
                         <div class="stt-header">
-                            <span>KẾT QUẢ WHISPER GPU NHẬN DIỆN (STT):</span>
-                            <span class="stt-status text-glow-cyan" id="mic-stt-status">CHỜ THU ÂM...</span>
+                            <span>KẾT QUẢ FASTER-WHISPER GPU NHẬN DIỆN:</span>
+                            <span class="stt-status text-glow-cyan" id="mic-stt-status">CHỜ LỆNH THU ÂM...</span>
                         </div>
                         <div class="stt-result-content" id="mic-stt-result">
-                            <em>(Hãy bấm "Bật Mic & Thu Âm", nói thử một câu ví dụ: "Bật đèn phòng khách", hệ thống sẽ chạy Whisper GPU và hiển thị bản dịch tại đây)</em>
+                            <em>(Bấm nút "Yêu Cầu Server Thu Âm", sau đó nói vào Micro của Server Linux. GPU trên máy Windows sẽ dịch văn bản và phát âm thanh lại cho bạn kiểm tra)</em>
                         </div>
                     </div>
                 </div>
