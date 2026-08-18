@@ -46,13 +46,22 @@ def np_to_wav_bytes(audio_np: np.ndarray, sample_rate: int = 16000) -> bytes:
         wf.writeframes(audio_np.tobytes())
     return wav_io.getvalue()
 
-def draw_vu_bar(rms: float, max_score: float = 0.0, threshold: float = 0.10, bar_len: int = 20) -> str:
-    """ASCII volume meter with wake score."""
-    pct = min(1.0, rms * 4.0)
+def draw_vu_bar(raw_rms: float, clean_rms: float, max_score: float = 0.0, threshold: float = 0.10, bar_len: int = 25) -> str:
+    """High-contrast ASCII volume meter with raw hardware RMS and wake score."""
+    pct = min(1.0, clean_rms * 5.0)
     filled = int(pct * bar_len)
-    bar = "█" * filled + "░" * (bar_len - filled)
-    status_icon = "🟢" if pct > 0.12 else "⚪"
-    return f"[{bar}] {int(pct * 100):3d}% {status_icon} | Wake Score: {max_score:.2f}/{threshold:.2f}"
+    bar = "█" * filled + "─" * (bar_len - filled)
+    
+    # State indicator
+    if clean_rms > 0.06:
+        status = "🟢 [VOICE / NÓI TO]"
+    elif clean_rms > 0.015:
+        status = "🟡 [DETECT / THÌ THẦM]"
+    else:
+        status = "⚪ [SILENT / YÊN TĨNH]"
+
+    raw_int = int(raw_rms * 32768)
+    return f"[{bar}] {int(pct * 100):3d}% {status} | Raw RMS: {raw_int:5d} | Wake: {max_score:.2f}/{threshold:.2f}"
 
 class AudioCleaner:
     """High-performance audio noise suppression, high-pass filter, and dynamic peak normalizer."""
@@ -384,14 +393,16 @@ class XiaomiSatellite:
                                 await asyncio.sleep(0.1)
                                 continue
 
-                            raw_chunk = self.read_audio_chunk(stream)
-                            
+                            # Raw hardware RMS before filter
+                            raw_float = raw_chunk.astype(np.float32) / 32768.0
+                            raw_rms = float(np.sqrt(np.mean(raw_float ** 2))) if raw_float.size > 0 else 0.0
+
                             # Clean noise and maximize amplitude
                             clean_chunk = self.cleaner.process(raw_chunk)
 
-                            # Calculate RMS
+                            # Clean RMS
                             audio_float = clean_chunk.astype(np.float32) / 32768.0
-                            rms = float(np.sqrt(np.mean(audio_float ** 2)))
+                            rms = float(np.sqrt(np.mean(audio_float ** 2))) if audio_float.size > 0 else 0.0
 
                             # Check Wake Word on amplified audio
                             triggered, score = self.check_wake_word(clean_chunk)
@@ -399,7 +410,7 @@ class XiaomiSatellite:
                             # Print live console VU meter
                             frame_counter += 1
                             if frame_counter % 2 == 0:
-                                vu_str = draw_vu_bar(rms, score, self.wake_threshold)
+                                vu_str = draw_vu_bar(raw_rms, rms, score, self.wake_threshold)
                                 print(f"\r  🎙️ XIAOMI MIC: {vu_str} ", end="", flush=True)
 
                                 # Forward volume pulse to Master Web HUD
