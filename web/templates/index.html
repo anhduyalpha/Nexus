@@ -36,6 +36,10 @@
                 <span class="stat-value text-glow-gold" id="stat-ai-model">{{ config.OLLAMA_MODEL if config.LLM_PROVIDER in ['ollama', 'local'] else config.GEMINI_MODEL }}</span>
             </div>
             <div class="stat-item">
+                <span class="stat-label">SATELLITE MIC:</span>
+                <span class="stat-value" id="satellite-status-badge" style="color: #ff5c8a;">CHƯA KẾT NỐI</span>
+            </div>
+            <div class="stat-item">
                 <span class="stat-label">STT ENGINE:</span>
                 <span class="stat-value">Faster-Whisper (CUDA/GPU)</span>
             </div>

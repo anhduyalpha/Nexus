@@ -131,6 +131,8 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+active_satellites: Dict[str, str] = {}
+
 @app.websocket("/ws/satellite")
 async def satellite_websocket_endpoint(websocket: WebSocket):
     """
@@ -138,8 +140,18 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
     Receives recorded audio chunks when wake word is detected on the satellite.
     """
     await websocket.accept()
-    satellite_name = "Linux Satellite"
-    logger.info("New Satellite connected to /ws/satellite")
+    client_ip = websocket.client.host if websocket.client else "LAN"
+    satellite_name = f"Linux Satellite ({client_ip})"
+    active_satellites[client_ip] = satellite_name
+    logger.info(f"🟢 New Satellite connected: {satellite_name}")
+
+    # Broadcast to Web HUD
+    await manager.broadcast({
+        "type": "satellite_status",
+        "connected": True,
+        "name": satellite_name,
+        "total_satellites": len(active_satellites)
+    })
 
     try:
         await websocket.send_json({
@@ -154,7 +166,7 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
 
             if "bytes" in message and message["bytes"]:
                 raw_bytes = message["bytes"]
-                logger.info(f"Received binary audio payload from {satellite_name} ({len(raw_bytes)} bytes)")
+                logger.info(f"🎙️ Received audio payload from {satellite_name} ({len(raw_bytes)} bytes)")
                 result = await orchestrator.process_external_audio(raw_bytes, satellite_name=satellite_name)
                 await websocket.send_json({
                     "type": "result",
@@ -171,7 +183,14 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
                 msg_type = payload.get("type", "")
                 if msg_type == "register":
                     satellite_name = payload.get("name", satellite_name)
+                    active_satellites[client_ip] = satellite_name
                     logger.info(f"Satellite registered name: {satellite_name}")
+                    await manager.broadcast({
+                        "type": "satellite_status",
+                        "connected": True,
+                        "name": satellite_name,
+                        "total_satellites": len(active_satellites)
+                    })
                     await websocket.send_json({"type": "registered", "name": satellite_name})
 
                 elif msg_type == "ping":
@@ -189,9 +208,17 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
                     })
 
     except WebSocketDisconnect:
-        logger.info(f"Satellite disconnected: {satellite_name}")
+        logger.info(f"🔴 Satellite disconnected: {satellite_name}")
     except Exception as e:
         logger.error(f"Error in satellite websocket: {e}")
+    finally:
+        active_satellites.pop(client_ip, None)
+        await manager.broadcast({
+            "type": "satellite_status",
+            "connected": len(active_satellites) > 0,
+            "name": list(active_satellites.values())[0] if active_satellites else "None",
+            "total_satellites": len(active_satellites)
+        })
 
 @app.post("/api/satellite/audio")
 async def api_satellite_audio(request: Request):

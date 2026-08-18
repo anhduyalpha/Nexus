@@ -112,6 +112,22 @@ document.addEventListener('DOMContentLoaded', () => {
             appendConversationTurn(msg.data.user_text, msg.data.response_text, msg.data.actions);
         } else if (msg.type === 'mute_status') {
             updateMuteUI(msg.is_muted);
+        } else if (msg.type === 'satellite_status') {
+            updateSatelliteUI(msg);
+        }
+    }
+
+    function updateSatelliteUI(data) {
+        const satBadge = document.getElementById('satellite-status-badge');
+        if (!satBadge) return;
+        if (data.connected) {
+            satBadge.textContent = `🟢 ONLINE (${data.name || 'Linux Server'})`;
+            satBadge.style.color = 'var(--green-glow)';
+            satBadge.classList.add('text-glow-cyan');
+        } else {
+            satBadge.textContent = 'CHƯA KẾT NỐI';
+            satBadge.style.color = '#ff5c8a';
+            satBadge.classList.remove('text-glow-cyan');
         }
     }
 
