@@ -1,3 +1,4 @@
+import time
 import asyncio
 import json
 import logging
@@ -125,6 +126,78 @@ async def websocket_endpoint(websocket: WebSocket):
                     asyncio.create_task(orchestrator.trigger_manual_command(cmd))
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+
+@app.websocket("/ws/satellite")
+async def satellite_websocket_endpoint(websocket: WebSocket):
+    """
+    Dedicated WebSocket endpoint for remote microphone satellites (e.g. Linux Laptop/Server).
+    Receives recorded audio chunks when wake word is detected on the satellite.
+    """
+    await websocket.accept()
+    satellite_name = "Linux Satellite"
+    logger.info("New Satellite connected to /ws/satellite")
+
+    try:
+        await websocket.send_json({
+            "type": "welcome",
+            "message": "Connected to Nexus Master (Windows GPU)",
+            "state": orchestrator.state
+        })
+
+        while True:
+            # Receive either binary audio data or JSON metadata
+            message = await websocket.receive()
+
+            if "bytes" in message and message["bytes"]:
+                raw_bytes = message["bytes"]
+                logger.info(f"Received binary audio payload from {satellite_name} ({len(raw_bytes)} bytes)")
+                result = await orchestrator.process_external_audio(raw_bytes, satellite_name=satellite_name)
+                await websocket.send_json({
+                    "type": "result",
+                    "status": "success",
+                    "result": result
+                })
+
+            elif "text" in message and message["text"]:
+                try:
+                    payload = json.loads(message["text"])
+                except Exception:
+                    payload = {}
+
+                msg_type = payload.get("type", "")
+                if msg_type == "register":
+                    satellite_name = payload.get("name", satellite_name)
+                    logger.info(f"Satellite registered name: {satellite_name}")
+                    await websocket.send_json({"type": "registered", "name": satellite_name})
+
+                elif msg_type == "ping":
+                    await websocket.send_json({"type": "pong", "time": time.time()})
+
+                elif msg_type == "audio_b64":
+                    import base64
+                    b64_str = payload.get("audio", "")
+                    raw_bytes = base64.b64decode(b64_str)
+                    result = await orchestrator.process_external_audio(raw_bytes, satellite_name=satellite_name)
+                    await websocket.send_json({
+                        "type": "result",
+                        "status": "success",
+                        "result": result
+                    })
+
+    except WebSocketDisconnect:
+        logger.info(f"Satellite disconnected: {satellite_name}")
+    except Exception as e:
+        logger.error(f"Error in satellite websocket: {e}")
+
+@app.post("/api/satellite/audio")
+async def api_satellite_audio(request: Request):
+    """REST API endpoint to upload audio bytes directly from any satellite or curl."""
+    raw_bytes = await request.body()
+    if not raw_bytes:
+        return JSONResponse({"error": "Empty audio body"}, status_code=400)
+
+    result = await orchestrator.process_external_audio(raw_bytes, satellite_name="REST Satellite")
+    return JSONResponse(result)
 
 @app.get("/api/status")
 async def api_get_status():

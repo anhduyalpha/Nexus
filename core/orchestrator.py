@@ -204,4 +204,66 @@ class VoiceOrchestrator:
         self.set_state(PipelineState.LISTENING_WAKE)
         return result
 
+    async def process_external_audio(self, audio_data: Any, satellite_name: str = "Linux Satellite") -> Dict[str, Any]:
+        """
+        Process audio streamed from an external satellite (e.g. Linux Laptop mic).
+        Plays chimes and speech through Master's speaker (Windows).
+        """
+        logger.info(f"Received external audio from {satellite_name}")
+        
+        # 1. Convert to numpy int16 array if raw bytes or WAV
+        if isinstance(audio_data, bytes):
+            if audio_data.startswith(b"RIFF"):
+                import io
+                import soundfile as sf
+                try:
+                    data_np, _ = sf.read(io.BytesIO(audio_data), dtype="int16")
+                    audio_np = data_np
+                except Exception:
+                    audio_np = np.frombuffer(audio_data[44:], dtype=np.int16)
+            else:
+                audio_np = np.frombuffer(audio_data, dtype=np.int16)
+        elif isinstance(audio_data, np.ndarray):
+            audio_np = audio_data
+        else:
+            return {"error": "Invalid audio data format"}
+
+        # 2. Wake detected sound & state on Master Speaker
+        self.set_state(PipelineState.WAKE_DETECTED, {"source": satellite_name})
+        sound_effects.play_wake()
+
+        # 3. Transcribe with Whisper (CUDA GPU)
+        self.set_state(PipelineState.TRANSCRIBING, {"source": satellite_name})
+        user_text = stt_engine.transcribe(audio_np)
+        self.emit_event("transcription", {"text": user_text, "source": satellite_name})
+
+        if not user_text:
+            logger.info("No speech recognized from external audio.")
+            self.set_state(PipelineState.LISTENING_WAKE)
+            return {"query": "", "response": "Không nhận diện được giọng nói.", "actions": []}
+
+        # 4. Process with Brain
+        self.set_state(PipelineState.THINKING, {"source": satellite_name})
+        result = await nexus_brain.process_user_query(user_text)
+        response_text = result.get("response", "")
+        actions = result.get("actions", [])
+
+        if actions:
+            self.set_state(PipelineState.EXECUTING, {"actions": actions, "source": satellite_name})
+            sound_effects.play_done()
+
+        self.emit_event("conversation_turn", {
+            "user_text": user_text,
+            "response_text": response_text,
+            "actions": actions,
+            "source": satellite_name
+        })
+
+        # 5. Speak on Master Speaker
+        self.set_state(PipelineState.SPEAKING, {"source": satellite_name})
+        await tts_engine.speak(response_text)
+
+        self.set_state(PipelineState.LISTENING_WAKE)
+        return result
+
 orchestrator = VoiceOrchestrator()

@@ -1,0 +1,18 @@
+[Unit]
+Description=NEXUS Smart Home Microphone Satellite Daemon (Linux)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=anhduy
+WorkingDirectory=/home/anhduy/Nexus
+ExecStart=/home/anhduy/Nexus/.venv/bin/python3 /home/anhduy/Nexus/satellite.py --server ws://192.168.1.100:8080/ws/satellite
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=WAKE_WORD_THRESHOLD=0.5
+Environment=SILENCE_DURATION_SEC=1.2
+
+[Install]
+WantedBy=multi-user.target

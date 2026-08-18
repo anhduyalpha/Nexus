@@ -68,6 +68,10 @@ class Config:
     PORT: int = int(os.getenv("PORT", "8080"))
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
+    # Satellite Configuration (For Linux Satellite Client)
+    SATELLITE_SERVER_URL: str = os.getenv("SATELLITE_SERVER_URL", "ws://localhost:8080/ws/satellite")
+    SATELLITE_NAME: str = os.getenv("SATELLITE_NAME", "Linux Laptop Mic")
+
     # Sound effects paths
     WAKE_SOUND: Path = SOUNDS_DIR / "wake_chime.wav"
     READY_SOUND: Path = SOUNDS_DIR / "ready_chime.wav"
