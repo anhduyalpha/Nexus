@@ -40,12 +40,17 @@ def main():
         logger.info("Voice listener disabled via --no-voice.")
 
     # 3. Print Banner
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
     print("\n" + "="*60)
-    print(" 🤖  N.E.X.U.S. SMART HOME INTELLIGENCE SYSTEM")
-    print(f" 🌐  Web Dashboard: http://{args.host}:{args.port}")
-    print(f" 🏠  Home Assistant: {config.HA_URL}")
-    print(f" 🧠  AI Brain: {config.GEMINI_MODEL}")
-    print(f" 🎙️  Wake Word: '{config.WAKE_WORD_MODEL}'")
+    print(" [*] N.E.X.U.S. SMART HOME INTELLIGENCE SYSTEM")
+    print(f" [>] Web Dashboard: http://{args.host}:{args.port}")
+    print(f" [>] Satellite WS:  ws://{args.host}:{args.port}/ws/satellite")
+    print(f" [>] Home Assistant: {config.HA_URL}")
+    print(f" [>] AI Brain Provider: {config.LLM_PROVIDER}")
     print("="*60 + "\n")
 
     # 4. Start Web Server

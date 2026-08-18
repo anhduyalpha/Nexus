@@ -1,32 +1,36 @@
 @echo off
-title NEXUS AI Smart Home Intelligence System
-chcp 65001 >nul
+setlocal enabledelayedexpansion
+set PYTHONIOENCODING=utf-8
+set PYTHONUTF8=1
 cd /d "%~dp0"
+title NEXUS Smart Home System
 
-echo =====================================================================
-echo  🤖 KHỞI ĐỘNG NEXUS AI SMART HOME (WINDOWS GPU / CUDA EDITION)
-echo =====================================================================
+echo =========================================================
+echo    NEXUS SMART HOME - MASTER SERVER (WINDOWS GPU)
+echo =========================================================
 echo.
 
-if not exist ".venv\Scripts\python.exe" (
-    echo [ERROR] Chua tim thay moi truong ao .venv!
-    echo Vui long khoi tao bang uv hoac chay:
+if not exist "%~dp0.venv\Scripts\python.exe" (
+    echo [ERROR] Virtual environment .venv not found in %~dp0
+    echo Please run:
     echo   uv venv --python 3.12 .venv
     echo   uv pip install -r requirements.txt
+    echo   uv pip install --no-deps openwakeword
     pause
     exit /b 1
 )
 
-if not exist ".env" (
-    echo [INFO] Tao file .env tu .env.example...
-    copy .env.example .env
-    echo [NOTE] Vui long mo file .env de dien Token Home Assistant va API Key!
+if not exist "%~dp0.env" (
+    echo [INFO] Creating .env from .env.example...
+    copy "%~dp0.env.example" "%~dp0.env"
+    echo [NOTE] Please edit .env with your HA_TOKEN and API Key!
 )
 
-echo [INFO] Dang khoi chay Nexus Voice & Web HUD Server...
-echo 👉 Truy cap Dashboard tai: http://localhost:8080
+echo [INFO] Starting Nexus Master Server...
+echo [INFO] Web Dashboard: http://localhost:8080
+echo [INFO] Satellite WS:  ws://localhost:8080/ws/satellite
 echo.
 
-".venv\Scripts\python.exe" main.py
+"%~dp0.venv\Scripts\python.exe" "%~dp0main.py"
 
 pause
