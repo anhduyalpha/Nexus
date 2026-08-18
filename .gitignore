@@ -1,0 +1,43 @@
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+.env.local
+
+# Sensitive Environment Configurations
+.env
+*.env
+!.env.example
+
+# Python Caches & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs & Databases
+*.log
+logs/
+*.sqlite3
+*.db
+
+# Temporary & Audio scratch
+tmp/
+temp/
+*.tmp
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE & Editor Settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

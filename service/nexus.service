@@ -1,0 +1,23 @@
+[Unit]
+Description=NEXUS AI Smart Home Voice Assistant & Server
+After=network.target sound.target home-assistant.service
+Wants=sound.target
+
+[Service]
+Type=simple
+# Thay doi User thanh username cua ban tren Ubuntu (vi du: duy, ubuntu, ...)
+User=%I
+WorkingDirectory=/opt/nexus
+ExecStart=/opt/nexus/.venv/bin/python main.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/opt/nexus/.env
+
+# Audio Group access for microphone and speakers
+SupplementaryGroups=audio
+
+[Install]
+WantedBy=multi-user.target

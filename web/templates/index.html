@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>N.E.X.U.S. // Home Intelligence HUD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/nexus_hud.css">
+</head>
+<body class="nexus-theme">
+    <!-- Cybernetic Background Grid & Particles -->
+    <div class="hud-background">
+        <div class="grid-overlay"></div>
+        <div class="scanline"></div>
+        <div class="ambient-glow"></div>
+    </div>
+
+    <!-- Header / Top Status Bar -->
+    <header class="hud-header">
+        <div class="hud-brand">
+            <div class="brand-hex"></div>
+            <div class="brand-text">
+                <span class="system-name">N.E.X.U.S.</span>
+                <span class="system-sub">HOME INTELLIGENCE SYSTEM v2.0</span>
+            </div>
+        </div>
+        <div class="hud-stats">
+            <div class="stat-item" id="stat-ha">
+                <span class="stat-label">HOME ASSISTANT:</span>
+                <span class="stat-value text-glow-cyan" id="ha-status-badge">CONNECTING...</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">AI CORE:</span>
+                <span class="stat-value text-glow-gold">{{ config.GEMINI_MODEL }}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">STT ENGINE:</span>
+                <span class="stat-value">Faster-Whisper (CPU)</span>
+            </div>
+            <button class="btn-hud-icon" id="btn-open-settings" title="Cài đặt hệ thống">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Central Nexus Core & HUD Interface -->
+    <main class="hud-main">
+        <!-- Arc Reactor / Voice Visualizer Core -->
+        <section class="arc-core-section">
+            <div class="arc-reactor-wrapper">
+                <div class="reactor-ring ring-outer"></div>
+                <div class="reactor-ring ring-middle"></div>
+                <div class="reactor-ring ring-inner"></div>
+                <div class="reactor-core">
+                    <canvas id="audio-visualizer-canvas" width="220" height="220"></canvas>
+                    <div class="core-symbol">
+                        <div class="core-pulse"></div>
+                        <span class="core-state-icon" id="core-state-icon">⚡</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="core-status-box">
+                <div class="status-pill" id="status-pill">
+                    <span class="status-dot"></span>
+                    <span class="status-text" id="status-text">LISTENING FOR 'HEY NEXUS'</span>
+                </div>
+                <div class="status-subtext" id="status-subtext">Microphone online // VAD Active</div>
+            </div>
+
+            <!-- Fast Action Controls -->
+            <div class="core-controls">
+                <button class="hud-btn-control" id="btn-toggle-mic">
+                    <span class="btn-icon">🎙️</span>
+                    <span id="btn-mic-text">Mute Mic</span>
+                </button>
+                <button class="hud-btn-control" id="btn-test-chime">
+                    <span class="btn-icon">🔔</span>
+                    <span>Test Chime</span>
+                </button>
+                <button class="hud-btn-control" id="btn-open-webhook">
+                    <span class="btn-icon">🚀</span>
+                    <span>Webhook Sender</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Two Column HUD Grid -->
+        <div class="hud-grid">
+            <!-- Left Column: Real-time Conversation Log & Interactive Command Box -->
+            <div class="hud-panel conversation-panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span class="panel-tag">// 01</span>
+                        LIVE INTELLIGENCE STREAM
+                    </div>
+                    <button class="btn-tiny" id="btn-clear-feed">Clear Feed</button>
+                </div>
+                <div class="panel-body conversation-feed" id="conversation-feed">
+                    <!-- Dynamic conversation entries will appear here -->
+                    <div class="feed-item nexus-intro">
+                        <div class="msg-avatar">NEXUS</div>
+                        <div class="msg-content">
+                            <p>Xin chào thưa ngài. Toàn bộ các hệ thống nhà thông minh và kết nối Home Assistant đã sẵn sàng. Ngài có thể gọi "Hey Nexus" hoặc gõ lệnh trực tiếp bên dưới.</p>
+                            <span class="msg-timestamp">SYSTEM INITIALIZED</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-footer command-input-bar">
+                    <input type="text" id="input-command" placeholder="Gõ lệnh trực tiếp (Ví dụ: 'Bật đèn phòng khách và hỏi nhiệt độ phòng ngủ')..." autocomplete="off">
+                    <button class="btn-hud-send" id="btn-send-command">
+                        <span>THỰC THI</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Column: Home Assistant Device Manager -->
+            <div class="hud-panel devices-panel">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <span class="panel-tag">// 02</span>
+                        SMART HOME ENTITIES (<span id="device-count">0</span>)
+                    </div>
+                    <button class="btn-tiny" id="btn-refresh-devices" title="Đồng bộ danh sách từ Home Assistant">🔄 Sync</button>
+                </div>
+                <div class="panel-tabs">
+                    <button class="tab-btn active" data-filter="all">Tất cả</button>
+                    <button class="tab-btn" data-filter="light">Đèn</button>
+                    <button class="tab-btn" data-filter="switch">Công tắc</button>
+                    <button class="tab-btn" data-filter="climate">Điều hòa</button>
+                    <button class="tab-btn" data-filter="sensor">Cảm biến</button>
+                </div>
+                <div class="panel-body devices-grid" id="devices-grid">
+                    <div class="device-loading">Đang tải danh sách thiết bị từ Home Assistant...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Settings Modal Drawer -->
+    <div class="hud-modal" id="modal-settings">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>// CẤU HÌNH HỆ THỐNG NEXUS</h3>
+                <button class="btn-close-modal" id="btn-close-settings">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-settings">
+                    <div class="form-group">
+                        <label>Home Assistant URL:</label>
+                        <input type="text" id="setting-ha-url" placeholder="http://localhost:8123" value="{{ config.HA_URL }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Home Assistant Long-Lived Access Token:</label>
+                        <input type="password" id="setting-ha-token" placeholder="Bearer Token từ Home Assistant...">
+                    </div>
+                    <div class="form-group">
+                        <label>Google Gemini API Key:</label>
+                        <input type="password" id="setting-gemini-key" placeholder="AIzaSy...">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group col">
+                            <label>Gemini Model:</label>
+                            <select id="setting-gemini-model">
+                                <option value="gemini-2.0-flash" selected>gemini-2.0-flash (Khuyên dùng)</option>
+                                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                                <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                            </select>
+                        </div>
+                        <div class="form-group col">
+                            <label>Giọng đọc TTS (Edge-TTS):</label>
+                            <select id="setting-tts-voice">
+                                <option value="vi-VN-NamMinhNeural" selected>vi-VN-NamMinhNeural (Nam - Nexus)</option>
+                                <option value="vi-VN-HoaiMyNeural">vi-VN-HoaiMyNeural (Nữ)</option>
+                                <option value="en-US-ChristopherNeural">en-US-ChristopherNeural (English)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Độ nhạy Wake Word (0.1 - 0.9):</label>
+                        <input type="number" id="setting-wake-threshold" min="0.1" max="0.9" step="0.05" value="{{ config.WAKE_WORD_THRESHOLD }}">
+                    </div>
+                    <button type="submit" class="btn-hud-primary">LƯU CẤU HÌNH</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Webhook Modal -->
+    <div class="hud-modal" id="modal-webhook">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>// WEBHOOK DISPATCHER TEST</h3>
+                <button class="btn-close-modal" id="btn-close-webhook">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="form-webhook">
+                    <div class="form-group">
+                        <label>Webhook URL (n8n / IFTTT / Telegram / HA):</label>
+                        <input type="url" id="webhook-url" placeholder="https://webhook.site/..." required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phương thức:</label>
+                        <select id="webhook-method">
+                            <option value="POST">POST (JSON)</option>
+                            <option value="GET">GET</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Payload JSON:</label>
+                        <textarea id="webhook-payload" rows="4" placeholder='{"event": "nexus_alert", "message": "Hello from Nexus"}'></textarea>
+                    </div>
+                    <button type="submit" class="btn-hud-primary">BẮN WEBHOOK</button>
+                </form>
+                <div class="webhook-result" id="webhook-result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/nexus_hud.js"></script>
+</body>
+</html>
