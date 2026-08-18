@@ -3,7 +3,7 @@
 NEXUS SMART HOME - DISTRIBUTED MICROPHONE SATELLITE (LINUX CLIENT)
 ==================================================================
 Runs on Linux Laptop / Raspberry Pi / Ubuntu Server.
-- MAXIMUM SENSITIVITY MODE (8.0x Pre-Amp Boost + Low Wake Threshold 0.15).
+- MAXIMUM SENSITIVITY & AUTO-PEAK NORMALIZER (Maximizes audio to 95% full scale).
 - Real-time High-Pass 80Hz filter + Soft Limiter (no digital clipping).
 - Real-time Console VU Meter showing live sound level and wake scores.
 - Hardware Device Scanner & Auto-selection.
@@ -41,17 +41,18 @@ def np_to_wav_bytes(audio_np: np.ndarray, sample_rate: int = 16000) -> bytes:
         wf.writeframes(audio_np.tobytes())
     return wav_io.getvalue()
 
-def draw_vu_bar(rms: float, max_score: float = 0.0, threshold: float = 0.15, bar_len: int = 20) -> str:
+def draw_vu_bar(rms: float, max_score: float = 0.0, threshold: float = 0.10, bar_len: int = 20) -> str:
     """ASCII volume meter with wake score."""
     pct = min(1.0, rms * 4.0)
     filled = int(pct * bar_len)
     bar = "█" * filled + "░" * (bar_len - filled)
-    return f"[{bar}] {int(pct * 100):3d}% | Score: {max_score:.2f}/{threshold:.2f}"
+    status_icon = "🟢" if pct > 0.15 else "⚪"
+    return f"[{bar}] {int(pct * 100):3d}% {status_icon} | Wake Score: {max_score:.2f}/{threshold:.2f}"
 
 class AudioCleaner:
-    """High-performance audio noise suppression, high-pass filter, and pre-amp gain booster."""
+    """High-performance audio noise suppression, high-pass filter, and dynamic peak normalizer."""
 
-    def __init__(self, sample_rate: int = 16000, gain: float = 8.0, noise_suppression: bool = True):
+    def __init__(self, sample_rate: int = 16000, gain: float = 12.0, noise_suppression: bool = True):
         self.sample_rate = sample_rate
         self.gain = gain
         self.noise_suppression = noise_suppression
@@ -62,11 +63,11 @@ class AudioCleaner:
         self.hp_alpha = 0.9695
 
         # Rolling noise floor tracking
-        self.noise_floor = 0.002
+        self.noise_floor = 0.001
         self.noise_alpha = 0.02
 
     def process(self, chunk_int16: np.ndarray) -> np.ndarray:
-        """Filter noise and amplify audio chunk in real-time."""
+        """Filter noise and dynamically boost volume to maximum level in real-time."""
         if chunk_int16.size == 0:
             return chunk_int16
 
@@ -93,8 +94,14 @@ class AudioCleaner:
         current_rms = float(np.sqrt(np.mean(filtered ** 2) + 1e-9))
         self.noise_floor = (1 - self.noise_alpha) * self.noise_floor + self.noise_alpha * min(self.noise_floor * 1.5, current_rms)
 
-        # 3. Dynamic Soft-Gain Boost (tanh curve prevents digital harsh clipping)
-        amplified = np.tanh(filtered * self.gain)
+        # 3. Dynamic Peak Normalization (Maximize to ~90% amplitude without clipping)
+        peak = float(np.max(np.abs(filtered)))
+        if peak > 0.001:
+            # Scale dynamically up to 25x boost
+            target_boost = min(25.0, 0.90 / peak)
+            amplified = np.tanh(filtered * target_boost)
+        else:
+            amplified = np.tanh(filtered * self.gain)
 
         # Convert back to int16
         clean_int16 = (amplified * 32767.0).astype(np.int16)
@@ -109,8 +116,8 @@ class NexusSatellite:
         satellite_name: str = "Linux Satellite Mic",
         device_index: int = None,
         wake_model: str = "hey_nexus",
-        wake_threshold: float = 0.15,
-        gain: float = 8.0,
+        wake_threshold: float = 0.10,
+        gain: float = 12.0,
         silence_limit: float = 1.2,
         sample_rate: int = 16000
     ):
@@ -143,11 +150,12 @@ class NexusSatellite:
                 if self.wake_model_name and self.wake_model_name not in ["hey_nexus"]:
                     self.oww_model = Model(wakeword_models=[self.wake_model_name], inference_framework="onnx")
                 else:
+                    # Load default models (hey_jarvis, alexa) for acoustic matching
                     self.oww_model = Model(wakeword_models=["hey_jarvis", "alexa"], inference_framework="onnx")
             except Exception:
                 self.oww_model = Model(inference_framework="onnx")
 
-            logger.info(f"openWakeWord initialized with models: {list(self.oww_model.models.keys())} (MAX SENSITIVITY: {self.wake_threshold})")
+            logger.info(f"openWakeWord initialized with models: {list(self.oww_model.models.keys())} (ULTRA SENSITIVITY: {self.wake_threshold})")
         except Exception as e:
             logger.warning(f"openWakeWord not available ({e}). Using voice activity energy mode.")
             self.oww_model = None
@@ -159,21 +167,22 @@ class NexusSatellite:
             if self.pa is None:
                 self.pa = pyaudio.PyAudio()
 
-            logger.info("=" * 60)
-            logger.info("🎙️ SCANNING MICROPHONE DEVICES ON LINUX:")
+            print("\n" + "=" * 65)
+            print(" 🎙️  DANH SÁCH THIẾT BỊ MICRO TÌM THẤY TRÊN LINUX:")
+            print("=" * 65)
             input_devices = []
             for i in range(self.pa.get_device_count()):
                 dev = self.pa.get_device_info_by_index(i)
                 if dev.get("maxInputChannels", 0) > 0:
-                    input_devices.append((i, dev.get("name", "")))
-                    logger.info(f"  [{i}] {dev.get('name')} (Channels: {dev.get('maxInputChannels')}, Rate: {int(dev.get('defaultSampleRate'))}Hz)")
-            logger.info("=" * 60)
+                    input_devices.append(i)
+                    print(f"  [{i}] {dev.get('name')} (Channels: {dev.get('maxInputChannels')}, Rate: {int(dev.get('defaultSampleRate'))}Hz)")
+            print("=" * 65)
 
             chosen_index = self.device_index
             if chosen_index is not None:
-                logger.info(f"Using explicitly specified Microphone Device Index: [{chosen_index}]")
+                print(f"👉 Đang sử dụng thiết bị chọn sẵn: Index [{chosen_index}]\n")
             else:
-                logger.info("Using Default System Microphone.")
+                print("👉 Đang sử dụng thiết bị mặc định (System Default Mic)\n")
 
             return self.pa.open(
                 format=pyaudio.paInt16,
@@ -207,11 +216,11 @@ class NexusSatellite:
         """Ultra-sensitive energy-based voice activity detection."""
         audio_float = chunk.astype(np.float32) / 32768.0
         rms = float(np.sqrt(np.mean(audio_float ** 2)))
-        return rms > 0.008
+        return rms > 0.005
 
     def record_phrase(self, stream, max_duration: float = 12.0) -> np.ndarray:
         """Record spoken command after wake word until silence is detected."""
-        logger.info("\n🎙️ [REC] Recording user voice command (speak now)...")
+        logger.info("\n🎙️ [REC] ĐANG THU ÂM CÂU LỆNH (HÃY NÓI)...")
         frames = []
         has_speech = False
         silence_start = None
@@ -238,7 +247,7 @@ class NexusSatellite:
         return np.array([], dtype=np.int16)
 
     def record_fixed_duration(self, stream, duration_sec: float = 5.0) -> np.ndarray:
-        """Record a fixed duration clip with noise filtering and gain amplification."""
+        """Record a fixed duration clip with maximum amplification."""
         logger.info(f"\n🎙️ Diagnostic recording in progress ({duration_sec}s)...")
         frames = []
         num_chunks = int((self.sample_rate * duration_sec) / self.chunk_size)
@@ -273,7 +282,7 @@ class NexusSatellite:
                                 "audio_b64": b64_audio,
                                 "name": self.satellite_name
                             }))
-                            logger.info(f"📤 Sent {len(wav_bytes)} bytes of boosted test audio to Master!")
+                            logger.info(f"📤 Sent {len(wav_bytes)} bytes of MAX BOOST test audio to Master!")
                 except Exception as e:
                     logger.error(f"Error handling message from Master: {e}")
         except asyncio.CancelledError:
@@ -284,7 +293,7 @@ class NexusSatellite:
     async def run(self):
         """Main satellite loop: auto-reconnect to Windows Master over WebSocket."""
         logger.info(f"Starting Nexus Satellite '{self.satellite_name}'")
-        logger.info(f"Pre-Amp Gain: {self.gain}x | MAX Sensitivity: {self.wake_threshold} | Noise Filter: ACTIVE")
+        logger.info(f"Dynamic Peak Normalizer: ACTIVE (Max 25x Boost) | Ultra Sensitivity: {self.wake_threshold}")
         logger.info(f"Target Master Server: {self.server_url}")
 
         while True:
@@ -306,7 +315,9 @@ class NexusSatellite:
                     # Start background receiver for remote commands
                     receiver_coro = asyncio.create_task(self._receiver_task(ws, stream))
 
-                    logger.info("👂 LISTENING FOR 'HEY NEXUS' (MAX SENSITIVITY)...")
+                    print("\n" + "=" * 65)
+                    print(" 👂 ĐANG LẮNG NGHE TỪ KHÓA 'HEY NEXUS' (CHẾ ĐỘ BẮT ÂM TỐI ĐA):")
+                    print("=" * 65)
                     frame_counter = 0
 
                     try:
@@ -318,7 +329,7 @@ class NexusSatellite:
                             data = stream.read(self.chunk_size, exception_on_overflow=False)
                             raw_chunk = np.frombuffer(data, dtype=np.int16)
                             
-                            # Clean noise and amplify
+                            # Clean noise and maximize amplitude
                             clean_chunk = self.cleaner.process(raw_chunk)
 
                             # Calculate RMS
@@ -397,19 +408,19 @@ def main():
         "--device",
         type=int,
         default=None,
-        help="Audio input device index (run to see device list)"
+        help="Audio input device index (e.g. --device 0, 1, 2...)"
     )
     parser.add_argument(
         "--threshold",
         type=float,
-        default=float(os.getenv("WAKE_WORD_THRESHOLD", "0.15")),
-        help="Wake word detection threshold (default: 0.15 for MAX SENSITIVITY)"
+        default=float(os.getenv("WAKE_WORD_THRESHOLD", "0.10")),
+        help="Wake word detection threshold (default: 0.10 for ULTRA SENSITIVITY)"
     )
     parser.add_argument(
         "--gain",
         type=float,
-        default=float(os.getenv("AUDIO_GAIN", "8.0")),
-        help="Software pre-amp volume multiplier (default: 8.0x boost)"
+        default=float(os.getenv("AUDIO_GAIN", "12.0")),
+        help="Software pre-amp volume multiplier (default: 12.0x boost)"
     )
     parser.add_argument(
         "--silence",
