@@ -180,14 +180,14 @@ class XiaomiSatellite:
         # Check scrcpy executable
         scrcpy_path = shutil.which("scrcpy")
         if scrcpy_path:
-            logger.info(f"Starting scrcpy USB audio capture bridge (Zero-Echo: --no-audio-playback)...")
+            logger.info("Starting scrcpy USB live audio stream from Xiaomi mic...")
             try:
                 self.scrcpy_proc = subprocess.Popen(
-                    [scrcpy_path, "--no-video", "--audio-source=mic", "--no-audio-playback"],
+                    [scrcpy_path, "--no-video", "--audio-source=mic", "--audio-output-buffer=30"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
                 )
-                time.sleep(1.0)
+                time.sleep(1.2)
             except Exception as e:
                 logger.error(f"Failed to start scrcpy: {e}")
 
@@ -204,9 +204,9 @@ class XiaomiSatellite:
                 dev = self.pa.get_device_info_by_index(i)
                 name = dev.get("name", "").lower()
                 if dev.get("maxInputChannels", 0) > 0:
-                    if "realtek" in name or "microphone" in name or "stereo mix" in name:
+                    if "stereo mix" in name or "realtek" in name or "microphone" in name:
                         chosen_index = i
-                        logger.info(f"🎙️ Selected Windows Audio Input: [{i}] {dev.get('name')}")
+                        logger.info(f"🎙️ Selected Audio Capture Endpoint: [{i}] {dev.get('name')}")
                         break
 
             return self.pa.open(
