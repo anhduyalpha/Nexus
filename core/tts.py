@@ -48,7 +48,7 @@ class TextToSpeech:
         # Notify satellites to mute during speaker output (prevents infinite echo loops)
         try:
             from web.app import broadcast_speaker_status
-            await broadcast_speaker_status(True)
+            broadcast_speaker_status(True)
         except Exception:
             pass
 
@@ -103,7 +103,7 @@ class TextToSpeech:
             await asyncio.sleep(0.6)
             try:
                 from web.app import broadcast_speaker_status
-                await broadcast_speaker_status(False)
+                broadcast_speaker_status(False)
             except Exception:
                 pass
 

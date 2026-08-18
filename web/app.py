@@ -52,14 +52,21 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Hook orchestrator events to WebSocket broadcast
+main_loop: Optional[asyncio.AbstractEventLoop] = None
+
+@app.on_event("startup")
+async def startup_event():
+    global main_loop
+    main_loop = asyncio.get_running_loop()
+
+# Hook orchestrator events to WebSocket broadcast (Thread-safe)
 def on_orchestrator_event(event: Dict[str, Any]):
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(manager.broadcast(event))
-    except Exception:
-        pass
+    global main_loop
+    if main_loop and main_loop.is_running():
+        try:
+            asyncio.run_coroutine_threadsafe(manager.broadcast(event), main_loop)
+        except Exception:
+            pass
 
 orchestrator.register_event_listener(on_orchestrator_event)
 
@@ -136,12 +143,11 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-active_satellites: Dict[str, str] = {}
-connected_satellite_sockets: Dict[str, WebSocket] = {}
+active_satellites: Dict[int, str] = {}
+connected_satellite_sockets: Dict[int, WebSocket] = {}
 
-async def broadcast_speaker_status(active: bool):
-    """Notify all connected satellites and Web HUD when TTS speaker starts/stops."""
-    for ip, ws in list(connected_satellite_sockets.items()):
+async def _async_broadcast_speaker_status(active: bool):
+    for ws_id, ws in list(connected_satellite_sockets.items()):
         try:
             await ws.send_json({"type": "speaker_status", "active": active})
         except Exception:
@@ -151,6 +157,16 @@ async def broadcast_speaker_status(active: bool):
     except Exception:
         pass
 
+def broadcast_speaker_status(active: bool):
+    """Notify all connected satellites and Web HUD when TTS speaker starts/stops (Thread-safe)."""
+    global main_loop
+    if main_loop and main_loop.is_running():
+        try:
+            asyncio.run_coroutine_threadsafe(_async_broadcast_speaker_status(active), main_loop)
+        except Exception:
+            pass
+
+
 
 @app.websocket("/ws/satellite")
 async def satellite_websocket_endpoint(websocket: WebSocket):
@@ -159,10 +175,11 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
     Receives recorded audio chunks when wake word is detected on the satellite.
     """
     await websocket.accept()
+    ws_id = id(websocket)
     client_ip = websocket.client.host if websocket.client else "LAN"
-    satellite_name = f"Linux Satellite ({client_ip})"
-    active_satellites[client_ip] = satellite_name
-    connected_satellite_sockets[client_ip] = websocket
+    satellite_name = f"Satellite ({client_ip})"
+    active_satellites[ws_id] = satellite_name
+    connected_satellite_sockets[ws_id] = websocket
     logger.info(f"🟢 New Satellite connected: {satellite_name}")
 
     # Broadcast to Web HUD
@@ -203,7 +220,7 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
                 msg_type = payload.get("type", "")
                 if msg_type == "register":
                     satellite_name = payload.get("name", satellite_name)
-                    active_satellites[client_ip] = satellite_name
+                    active_satellites[ws_id] = satellite_name
                     logger.info(f"Satellite registered name: {satellite_name}")
                     await manager.broadcast({
                         "type": "satellite_status",
@@ -270,8 +287,8 @@ async def satellite_websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Error in satellite websocket: {e}")
     finally:
-        active_satellites.pop(client_ip, None)
-        connected_satellite_sockets.pop(client_ip, None)
+        active_satellites.pop(ws_id, None)
+        connected_satellite_sockets.pop(ws_id, None)
         await manager.broadcast({
             "type": "satellite_status",
             "connected": len(active_satellites) > 0,
