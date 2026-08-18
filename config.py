@@ -52,10 +52,10 @@ class Config:
     SILENCE_DURATION_SEC: float = float(os.getenv("SILENCE_DURATION_SEC", "1.2"))
     SAMPLE_RATE: int = int(os.getenv("SAMPLE_RATE", "16000"))
 
-    # Faster Whisper STT
+    # Faster Whisper STT (GPU CUDA Auto-Detection)
     WHISPER_MODEL_SIZE: str = os.getenv("WHISPER_MODEL_SIZE", "base")
-    WHISPER_DEVICE: str = os.getenv("WHISPER_DEVICE", "cpu")
-    WHISPER_COMPUTE_TYPE: str = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+    WHISPER_DEVICE: str = os.getenv("WHISPER_DEVICE", "auto")
+    WHISPER_COMPUTE_TYPE: str = os.getenv("WHISPER_COMPUTE_TYPE", "float16")
     STT_LANGUAGE: str = os.getenv("STT_LANGUAGE", "vi")
 
     # Edge TTS

@@ -25,20 +25,39 @@ class SpeechToText:
         self._initialized = False
 
     def init_model(self):
-        """Lazy load Faster Whisper model."""
+        """Lazy load Faster Whisper model with CUDA GPU auto-detection."""
         if self._initialized:
             return
 
+        from faster_whisper import WhisperModel
+        target_device = (self.device or "auto").lower()
+
+        # 1. Attempt GPU CUDA loading if requested or auto
+        if target_device in ("cuda", "auto", "gpu"):
+            try:
+                compute = self.compute_type if self.compute_type not in ("int8", "default") else "float16"
+                logger.info(f"Attempting to load faster-whisper on NVIDIA GPU (CUDA, {self.model_size}, {compute})...")
+                self.model = WhisperModel(
+                    self.model_size,
+                    device="cuda",
+                    compute_type=compute
+                )
+                self._initialized = True
+                logger.info("🚀 faster-whisper loaded successfully on NVIDIA GPU (CUDA)!")
+                return
+            except Exception as e:
+                logger.info(f"CUDA initialization skipped or not available ({e}). Falling back to CPU...")
+
+        # 2. CPU fallback
         try:
-            from faster_whisper import WhisperModel
-            logger.info(f"Loading faster-whisper ({self.model_size}, {self.device}, {self.compute_type})...")
+            logger.info(f"Loading faster-whisper on CPU ({self.model_size}, int8)...")
             self.model = WhisperModel(
                 self.model_size,
-                device=self.device,
-                compute_type=self.compute_type
+                device="cpu",
+                compute_type="int8"
             )
             self._initialized = True
-            logger.info("faster-whisper model loaded successfully!")
+            logger.info("faster-whisper model loaded successfully on CPU!")
         except Exception as e:
             logger.error(f"Failed to load faster-whisper: {e}")
             self.model = None

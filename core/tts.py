@@ -48,44 +48,47 @@ class TextToSpeech:
         try:
             audio_bytes = await self.synthesize_to_bytes(clean_text)
             
-            # Save temporarily and play
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
-                tf.write(audio_bytes)
-                temp_audio_path = tf.name
-
+            # 1. Direct in-memory playback using soundfile + sounddevice (Fastest & Cross-Platform)
+            played = False
             try:
-                # Play using soundfile / sounddevice or system command (ffplay/mpv/mpg123)
-                proc = await asyncio.create_subprocess_exec(
-                    "ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", temp_audio_path,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL
-                )
-                await proc.wait()
-            except FileNotFoundError:
-                # Fallback to mpg123 / cvlc / paplay
+                import soundfile as sf
+                import sounddevice as sd
+                data, fs = sf.read(io.BytesIO(audio_bytes))
+                sd.play(data, fs)
+                sd.wait()
+                played = True
+            except Exception as sf_err:
+                logger.debug(f"Direct in-memory playback skipped ({sf_err}), trying file-based player...")
+
+            # 2. File-based player fallback (ffplay / mpv)
+            if not played:
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
+                    tf.write(audio_bytes)
+                    temp_audio_path = tf.name
+
                 try:
                     proc = await asyncio.create_subprocess_exec(
-                        "mpv", "--no-video", "--really-quiet", temp_audio_path,
+                        "ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", temp_audio_path,
                         stdout=asyncio.subprocess.DEVNULL,
                         stderr=asyncio.subprocess.DEVNULL
                     )
                     await proc.wait()
-                except Exception:
-                    # Windows or fallback python player
+                except FileNotFoundError:
                     try:
-                        import soundfile as sf
-                        import sounddevice as sd
-                        data, fs = sf.read(temp_audio_path)
-                        sd.play(data, fs)
-                        sd.wait()
+                        proc = await asyncio.create_subprocess_exec(
+                            "mpv", "--no-video", "--really-quiet", temp_audio_path,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.DEVNULL
+                        )
+                        await proc.wait()
                     except Exception as e:
                         logger.warning(f"Audio playback error: {e}")
-            finally:
-                if os.path.exists(temp_audio_path):
-                    try:
-                        os.remove(temp_audio_path)
-                    except Exception:
-                        pass
+                finally:
+                    if os.path.exists(temp_audio_path):
+                        try:
+                            os.remove(temp_audio_path)
+                        except Exception:
+                            pass
         except Exception as e:
             logger.error(f"TTS synthesis/playback error: {e}")
 
