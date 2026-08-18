@@ -38,11 +38,11 @@ if %errorlevel% == 0 (
 del temp_adb.txt > nul 2>&1
 
 echo.
-echo [INFO] Starting Nexus Master Server...
+echo [INFO] Starting Nexus Master AI Server (Dedicated Phone Mic Mode)...
 echo [INFO] Web Dashboard: http://localhost:8080
-echo [INFO] Satellite WS:  ws://localhost:8080/ws/satellite
+echo [INFO] Phone Mic WS:  ws://localhost:8080/ws/satellite
 echo.
 
-"%~dp0.venv\Scripts\python.exe" "%~dp0main.py"
+"%~dp0.venv\Scripts\python.exe" "%~dp0main.py" --no-voice
 
 pause

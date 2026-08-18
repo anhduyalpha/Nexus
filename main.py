@@ -34,10 +34,12 @@ def main():
 
     # 2. Start Voice Orchestrator
     if not args.no_voice:
-        logger.info("Initializing Nexus Voice Orchestrator...")
+        logger.info("Initializing Nexus Local Voice Orchestrator...")
         orchestrator.start()
     else:
-        logger.info("Voice listener disabled via --no-voice.")
+        logger.info("📱 Dedicated Phone Microphone Hub Mode active (Local host microphone listener disabled).")
+        orchestrator.is_running = True
+        orchestrator.set_state("LISTENING_WAKE")
 
     # 3. Print Banner
     try:
@@ -48,7 +50,7 @@ def main():
     print("\n" + "="*60)
     print(" [*] N.E.X.U.S. SMART HOME INTELLIGENCE SYSTEM")
     print(f" [>] Web Dashboard: http://{args.host}:{args.port}")
-    print(f" [>] Satellite WS:  ws://{args.host}:{args.port}/ws/satellite")
+    print(f" [>] Phone Mic WS:  ws://{args.host}:{args.port}/ws/satellite")
     print(f" [>] Home Assistant: {config.HA_URL}")
     print(f" [>] AI Brain Provider: {config.LLM_PROVIDER}")
     print("="*60 + "\n")
@@ -59,10 +61,13 @@ def main():
             app,
             host=args.host,
             port=args.port,
-            log_level="info"
+            log_level="info",
+            access_log=False
         )
     except (KeyboardInterrupt, SystemExit):
         logger.info("Shutting down Nexus...")
+    except Exception as e:
+        logger.error(f"Uvicorn server error: {e}")
     finally:
         orchestrator.stop()
 

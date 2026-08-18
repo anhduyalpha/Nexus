@@ -128,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const satBadge = document.getElementById('satellite-status-badge');
         if (!satBadge) return;
         if (data.connected) {
-            satBadge.textContent = `🟢 ONLINE (${data.name || 'Linux Server'})`;
+            satBadge.textContent = `🟢 ONLINE (${data.name || 'Xiaomi Phone Mic'})`;
             satBadge.style.color = 'var(--green-glow)';
             satBadge.classList.add('text-glow-cyan');
         } else {
