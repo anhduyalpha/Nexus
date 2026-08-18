@@ -107,7 +107,12 @@ async def websocket_endpoint(websocket: WebSocket):
         "type": "init_state",
         "state": orchestrator.state,
         "is_muted": orchestrator.is_muted,
-        "ha_status": await ha_client.check_connection()
+        "ha_status": await ha_client.check_connection(),
+        "satellite_status": {
+            "connected": len(active_satellites) > 0,
+            "name": list(active_satellites.values())[0] if active_satellites else "None",
+            "total_satellites": len(active_satellites)
+        }
     })
     try:
         while True:

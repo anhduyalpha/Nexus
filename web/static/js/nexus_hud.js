@@ -104,6 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
             updateStateUI(msg.state);
             updateMuteUI(msg.is_muted);
             updateHAStatus(msg.ha_status);
+            if (msg.satellite_status) {
+                updateSatelliteUI(msg.satellite_status);
+            }
         } else if (msg.type === 'state_change') {
             updateStateUI(msg.data.state);
         } else if (msg.type === 'audio_level') {
