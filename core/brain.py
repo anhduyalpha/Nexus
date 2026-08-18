@@ -1,5 +1,6 @@
 import json
 import logging
+import aiohttp
 from typing import Dict, Any, List, Optional
 from config import config
 from integrations.ha_client import ha_client
@@ -8,7 +9,7 @@ from integrations.media_controller import media_controller
 
 logger = logging.getLogger("NexusBrain")
 
-NEXUS_SYSTEM_PROMPT = """Bạn là NEXUS - Trợ lý siêu AI thông minh, quyền năng và tối tân.
+NEXUS_SYSTEM_PROMPT = """Bạn là NEXUS - Trợ lý siêu AI thông minh, quyền năng và tối tân phong cách quản gia AI.
 Nhiệm vụ của bạn là phục vụ người dùng (gọi người dùng là "Sir", "Ngài", hoặc "Thưa ngài" / "Thưa anh").
 
 Tính cách & Phong thái của NEXUS:
@@ -27,7 +28,7 @@ Bạn được trang bị các công cụ (Function Calling) sau để tương t
 Hãy chọn công cụ chính xác tương ứng với thiết bị trong nhà khi người dùng yêu cầu.
 """
 
-# Gemini Tool Definitions in standard JSON Schema / Function Declaration format
+# Tool Definitions
 NEXUS_TOOLS = [
     {
         "name": "control_ha_device",
@@ -132,8 +133,32 @@ NEXUS_TOOLS = [
     }
 ]
 
+# Convert tools format for OpenAI / Ollama compatible API
+OLLAMA_OPENAI_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": t["name"],
+            "description": t["description"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    k: {
+                        "type": v["type"].lower() if v["type"] != "OBJECT" else "object",
+                        "description": v.get("description", ""),
+                        **({"enum": v["enum"]} if "enum" in v else {})
+                    }
+                    for k, v in t["parameters"]["properties"].items()
+                },
+                "required": t["parameters"].get("required", [])
+            }
+        }
+    }
+    for t in NEXUS_TOOLS
+]
+
 class NexusBrain:
-    """Core Reasoning and Tool Orchestration Engine using Google Gemini."""
+    """Core Reasoning and Tool Orchestration Engine supporting Google Gemini & Local Ollama."""
 
     def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
         self.api_key = api_key or config.GEMINI_API_KEY
@@ -150,11 +175,9 @@ class NexusBrain:
                 action = args.get("action", "")
                 params = args.get("params", {}) or {}
                 
-                # Check domain
                 domain = entity_id.split(".")[0] if "." in entity_id else "homeassistant"
                 service = action
                 
-                # Map generic actions to domain-specific services
                 if action == "set_temperature":
                     domain = "climate"
                     service = "set_temperature"
@@ -212,15 +235,182 @@ class NexusBrain:
             logger.error(f"Error executing tool {name}: {e}")
             return {"error": str(e)}
 
+    async def _process_with_ollama(self, user_text: str, system_instruction: str) -> Dict[str, Any]:
+        """Process user query locally using Ollama / OpenAI-compatible endpoint."""
+        url = f"{config.OLLAMA_URL}/v1/chat/completions"
+        model = config.OLLAMA_MODEL
+        
+        messages = [{"role": "system", "content": system_instruction}]
+        for turn in self.conversation_history[-self.max_history_turns:]:
+            role = "assistant" if turn["role"] == "model" else turn["role"]
+            content = turn["parts"][0] if isinstance(turn["parts"], list) else str(turn["parts"])
+            messages.append({"role": role, "content": content})
+        
+        messages.append({"role": "user", "content": user_text})
+        
+        payload = {
+            "model": model,
+            "messages": messages,
+            "tools": OLLAMA_OPENAI_TOOLS,
+            "tool_choice": "auto",
+            "temperature": 0.2
+        }
+
+        executed_actions = []
+        reply_text = ""
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                    if resp.status != 200:
+                        err_text = await resp.text()
+                        logger.error(f"Ollama error (HTTP {resp.status}): {err_text}")
+                        return {
+                            "query": user_text,
+                            "response": f"Thưa ngài, máy chủ AI cục bộ phản hồi lỗi: HTTP {resp.status}.",
+                            "actions": []
+                        }
+                    
+                    data = await resp.json()
+                    choice = data.get("choices", [{}])[0]
+                    msg = choice.get("message", {})
+                    
+                    # Handle Tool Calls
+                    tool_calls = msg.get("tool_calls", [])
+                    if tool_calls:
+                        for tc in tool_calls:
+                            fn_name = tc.get("function", {}).get("name", "")
+                            raw_args = tc.get("function", {}).get("arguments", "{}")
+                            try:
+                                fn_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                            except Exception:
+                                fn_args = {}
+                            
+                            tool_result = await self.execute_tool_call(fn_name, fn_args)
+                            executed_actions.append({
+                                "tool": fn_name,
+                                "args": fn_args,
+                                "result": tool_result
+                            })
+                        
+                        # Generate conversational confirmation
+                        reply_text = msg.get("content") or "Đã thực hiện xong lệnh thưa ngài."
+                    else:
+                        reply_text = msg.get("content", "Đã rõ thưa ngài.")
+
+            self.conversation_history.append({"role": "user", "parts": [user_text]})
+            self.conversation_history.append({"role": "model", "parts": [reply_text]})
+
+            return {
+                "query": user_text,
+                "response": reply_text.strip(),
+                "actions": executed_actions
+            }
+        except Exception as e:
+            logger.error(f"Local Ollama Brain Error: {e}")
+            return {
+                "query": user_text,
+                "response": f"Thưa ngài, không thể kết nối tới Ollama ({str(e)[:60]}). Ngài đã chạy 'ollama serve' chưa?",
+                "actions": []
+            }
+
+    async def _process_with_gemini(self, user_text: str, system_instruction: str) -> Dict[str, Any]:
+        """Process user query using Google Gemini API."""
+        executed_actions = []
+        reply_text = ""
+
+        # Fallback model list
+        candidate_models = [self.model_name, "gemini-1.5-flash", "gemini-2.5-flash", "gemini-1.5-pro"]
+        # Remove duplicates while preserving order
+        candidate_models = list(dict.fromkeys(candidate_models))
+
+        last_error = None
+        for model_cand in candidate_models:
+            try:
+                import google.generativeai as genai
+                if self.api_key:
+                    genai.configure(api_key=self.api_key)
+
+                model = genai.GenerativeModel(
+                    model_name=model_cand,
+                    system_instruction=system_instruction,
+                    tools=[
+                        genai.protos.Tool(
+                            function_declarations=[
+                                genai.protos.FunctionDeclaration(
+                                    name=t["name"],
+                                    description=t["description"],
+                                    parameters=t["parameters"]
+                                ) for t in NEXUS_TOOLS
+                            ]
+                        )
+                    ]
+                )
+
+                chat = model.start_chat(history=self.conversation_history[-self.max_history_turns:])
+                response = await chat.send_message_async(user_text)
+
+                if response.candidates and response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts:
+                        if part.function_call:
+                            fn_name = part.function_call.name
+                            fn_args = dict(part.function_call.args)
+                            
+                            tool_result = await self.execute_tool_call(fn_name, fn_args)
+                            executed_actions.append({
+                                "tool": fn_name,
+                                "args": fn_args,
+                                "result": tool_result
+                            })
+
+                            followup_resp = await chat.send_message_async(
+                                genai.protos.Content(
+                                    parts=[
+                                        genai.protos.Part(
+                                            function_response=genai.protos.FunctionResponse(
+                                                name=fn_name,
+                                                response={"result": tool_result}
+                                            )
+                                        )
+                                    ]
+                                )
+                            )
+                            reply_text = followup_resp.text or "Đã thực hiện xong thưa ngài."
+                            break
+                        elif part.text:
+                            reply_text += part.text
+
+                if not reply_text:
+                    reply_text = response.text or "Đã rõ thưa ngài."
+
+                self.conversation_history.append({"role": "user", "parts": [user_text]})
+                self.conversation_history.append({"role": "model", "parts": [reply_text]})
+                
+                # Succeeded with this model
+                return {
+                    "query": user_text,
+                    "response": reply_text.strip(),
+                    "actions": executed_actions
+                }
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Gemini model '{model_cand}' failed: {e}. Trying fallback model...")
+
+        logger.error(f"All Gemini models failed. Last error: {last_error}")
+        return {
+            "query": user_text,
+            "response": f"Thưa ngài, đã xảy ra trục trặc trong quá trình kết nối Gemini API: {str(last_error)[:80]}.",
+            "actions": []
+        }
+
     async def process_user_query(self, user_text: str) -> Dict[str, Any]:
         """
-        Send user voice query to Gemini LLM with HA entity context and Function Calling.
-        Returns response text and list of executed actions.
+        Main entrypoint: Dispatch user voice query to either Local Ollama or Google Gemini.
         """
         if not user_text.strip():
             return {"response": "Thưa ngài, tôi chưa nghe rõ yêu cầu của ngài.", "actions": []}
 
-        # 1. Fetch available HA devices to augment context
+        # Fetch available HA devices to augment context
         try:
             device_summary = await ha_client.get_clean_entity_summary()
             devices_context_str = json.dumps(device_summary, ensure_ascii=False)
@@ -229,84 +419,11 @@ class NexusBrain:
 
         system_instruction = f"{NEXUS_SYSTEM_PROMPT}\n\nDanh sách các thiết bị hiện có trong nhà:\n{devices_context_str}"
 
-        # 2. Call Google Gemini via google.generativeai / google-genai
-        executed_actions = []
-        reply_text = ""
-
-        try:
-            import google.generativeai as genai
-            if self.api_key:
-                genai.configure(api_key=self.api_key)
-
-            # Build tools list for GenAI
-            model = genai.GenerativeModel(
-                model_name=self.model_name,
-                system_instruction=system_instruction,
-                tools=[
-                    genai.protos.Tool(
-                        function_declarations=[
-                            genai.protos.FunctionDeclaration(
-                                name=t["name"],
-                                description=t["description"],
-                                parameters=t["parameters"]
-                            ) for t in NEXUS_TOOLS
-                        ]
-                    )
-                ]
-            )
-
-            # Format history
-            chat = model.start_chat(history=self.conversation_history[-self.max_history_turns:])
-            response = await chat.send_message_async(user_text)
-
-            # Handle Function Calling
-            if response.candidates and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if part.function_call:
-                        fn_name = part.function_call.name
-                        fn_args = dict(part.function_call.args)
-                        
-                        tool_result = await self.execute_tool_call(fn_name, fn_args)
-                        executed_actions.append({
-                            "tool": fn_name,
-                            "args": fn_args,
-                            "result": tool_result
-                        })
-
-                        # Send tool result back to model to get final spoken response
-                        followup_resp = await chat.send_message_async(
-                            genai.protos.Content(
-                                parts=[
-                                    genai.protos.Part(
-                                        function_response=genai.protos.FunctionResponse(
-                                            name=fn_name,
-                                            response={"result": tool_result}
-                                        )
-                                    )
-                                ]
-                            )
-                        )
-                        reply_text = followup_resp.text or "Đã thực hiện xong thưa ngài."
-                        break
-                    elif part.text:
-                        reply_text += part.text
-
-            if not reply_text:
-                reply_text = response.text or "Đã rõ thưa ngài."
-
-            # Save to conversation history
-            self.conversation_history.append({"role": "user", "parts": [user_text]})
-            self.conversation_history.append({"role": "model", "parts": [reply_text]})
-
-        except Exception as e:
-            logger.error(f"Gemini Brain API Error: {e}")
-            reply_text = f"Thưa ngài, đã xảy ra trục trặc trong quá trình xử lý: {str(e)[:80]}."
-
-        return {
-            "query": user_text,
-            "response": reply_text.strip(),
-            "actions": executed_actions
-        }
+        # Choose provider
+        if config.LLM_PROVIDER in ("ollama", "local", "localai", "vllm"):
+            return await self._process_with_ollama(user_text, system_instruction)
+        else:
+            return await self._process_with_gemini(user_text, system_instruction)
 
     def clear_memory(self):
         """Clear conversational context memory."""

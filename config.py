@@ -35,9 +35,16 @@ class Config:
     HA_URL: str = os.getenv("HA_URL", "http://localhost:8123").rstrip("/")
     HA_TOKEN: str = os.getenv("HA_TOKEN", "")
 
+    # LLM Engine (gemini / ollama / local)
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini").lower()
+    
     # Gemini AI
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+
+    # Local LLM (Ollama / LocalAI / llama.cpp)
+    OLLAMA_URL: str = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
 
     # Audio & Voice Pipeline
     WAKE_WORD_MODEL: str = os.getenv("WAKE_WORD_MODEL", "hey_nexus")

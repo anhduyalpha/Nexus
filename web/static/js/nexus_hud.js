@@ -302,7 +302,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const resp = await fetch('/api/settings');
         const settings = await resp.json();
         document.getElementById('setting-ha-url').value = settings.ha_url || '';
-        document.getElementById('setting-gemini-model').value = settings.gemini_model || 'gemini-2.0-flash';
+        if (document.getElementById('setting-llm-provider')) {
+            document.getElementById('setting-llm-provider').value = settings.llm_provider || 'gemini';
+        }
+        document.getElementById('setting-gemini-model').value = settings.gemini_model || 'gemini-1.5-flash';
         document.getElementById('setting-tts-voice').value = settings.tts_voice || 'vi-VN-NamMinhNeural';
         document.getElementById('setting-wake-threshold').value = settings.wake_threshold || 0.5;
         modalSettings.classList.add('open');
@@ -317,6 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ha_token: document.getElementById('setting-ha-token').value.trim(),
             gemini_api_key: document.getElementById('setting-gemini-key').value.trim(),
             gemini_model: document.getElementById('setting-gemini-model').value,
+            llm_provider: document.getElementById('setting-llm-provider') ? document.getElementById('setting-llm-provider').value : 'gemini',
             tts_voice: document.getElementById('setting-tts-voice').value,
             wake_threshold: parseFloat(document.getElementById('setting-wake-threshold').value)
         };

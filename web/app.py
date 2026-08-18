@@ -79,6 +79,7 @@ class SettingsUpdateRequest(BaseModel):
     gemini_model: str
     tts_voice: str
     wake_threshold: float
+    llm_provider: Optional[str] = "gemini"
 
 # Routes
 @app.get("/", response_class=HTMLResponse)
@@ -165,6 +166,8 @@ async def api_get_settings():
         "ha_token_set": bool(config.HA_TOKEN),
         "gemini_api_key_set": bool(config.GEMINI_API_KEY),
         "gemini_model": config.GEMINI_MODEL,
+        "llm_provider": config.LLM_PROVIDER,
+        "ollama_model": config.OLLAMA_MODEL,
         "tts_voice": config.TTS_VOICE,
         "wake_threshold": config.WAKE_WORD_THRESHOLD
     }
@@ -176,6 +179,7 @@ async def api_update_settings(req: SettingsUpdateRequest):
         HA_TOKEN=req.ha_token or config.HA_TOKEN,
         GEMINI_API_KEY=req.gemini_api_key or config.GEMINI_API_KEY,
         GEMINI_MODEL=req.gemini_model,
+        LLM_PROVIDER=req.llm_provider or config.LLM_PROVIDER,
         TTS_VOICE=req.tts_voice,
         WAKE_WORD_THRESHOLD=req.wake_threshold
     )
@@ -184,4 +188,6 @@ async def api_update_settings(req: SettingsUpdateRequest):
         ha_client.token = config.HA_TOKEN
     if req.gemini_api_key:
         nexus_brain.api_key = config.GEMINI_API_KEY
+    if req.gemini_model:
+        nexus_brain.model_name = req.gemini_model
     return {"status": "ok", "message": "Settings updated successfully."}
