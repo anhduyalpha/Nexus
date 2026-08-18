@@ -106,6 +106,14 @@ async def get_index(request: Request):
         }
     )
 
+@app.get("/satellite", response_class=HTMLResponse)
+async def get_satellite_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="satellite.html",
+        context={"config": config}
+    )
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
