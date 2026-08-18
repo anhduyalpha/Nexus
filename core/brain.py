@@ -235,6 +235,36 @@ class NexusBrain:
             logger.error(f"Error executing tool {name}: {e}")
             return {"error": str(e)}
 
+    async def ensure_ollama_model(self, model_name: Optional[str] = None) -> bool:
+        """Check if Ollama model exists locally; if missing, automatically pull it."""
+        target_model = model_name or config.OLLAMA_MODEL
+        tags_url = f"{config.OLLAMA_URL}/api/tags"
+        pull_url = f"{config.OLLAMA_URL}/api/pull"
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(tags_url, timeout=aiohttp.ClientTimeout(total=3)) as resp:
+                    if resp.status != 200:
+                        return False
+                    data = await resp.json()
+                    models = [m.get("name", "").split(":")[0] for m in data.get("models", [])]
+                    exact_models = [m.get("name", "") for m in data.get("models", [])]
+
+                    if target_model in exact_models or target_model in models or target_model.split(":")[0] in models:
+                        logger.info(f"Ollama model '{target_model}' is ready locally.")
+                        return True
+
+                    logger.info(f"📥 Ollama model '{target_model}' not found locally. Auto-pulling from Ollama registry...")
+                    async with session.post(pull_url, json={"name": target_model, "stream": False}, timeout=aiohttp.ClientTimeout(total=300)) as pull_resp:
+                        if pull_resp.status == 200:
+                            logger.info(f"✅ Successfully auto-downloaded Ollama model: '{target_model}'!")
+                            return True
+                        else:
+                            logger.warning(f"Auto-pull model '{target_model}' returned status {pull_resp.status}")
+        except Exception as e:
+            logger.debug(f"Could not verify/pull Ollama model '{target_model}': {e}")
+        return False
+
     async def _process_with_ollama(self, user_text: str, system_instruction: str) -> Dict[str, Any]:
         """Process user query locally using Ollama / OpenAI-compatible endpoint."""
         url = f"{config.OLLAMA_URL}/v1/chat/completions"
@@ -261,15 +291,30 @@ class NexusBrain:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=25)) as resp:
                     if resp.status != 200:
                         err_text = await resp.text()
-                        logger.error(f"Ollama error (HTTP {resp.status}): {err_text}")
-                        return {
-                            "query": user_text,
-                            "response": f"Thưa ngài, máy chủ AI cục bộ phản hồi lỗi: HTTP {resp.status}.",
-                            "actions": []
-                        }
+                        logger.warning(f"Ollama error (HTTP {resp.status}): {err_text}. Attempting auto-pull...")
+                        if "not found" in err_text.lower() or resp.status == 404:
+                            pulled = await self.ensure_ollama_model(model)
+                            if pulled:
+                                # Retry request once
+                                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=25)) as retry_resp:
+                                    if retry_resp.status == 200:
+                                        data = await retry_resp.json()
+                                        resp = retry_resp
+                                    else:
+                                        return {
+                                            "query": user_text,
+                                            "response": f"Thưa ngài, đã tải model nhưng chưa khởi động được: HTTP {retry_resp.status}.",
+                                            "actions": []
+                                        }
+                        else:
+                            return {
+                                "query": user_text,
+                                "response": f"Thưa ngài, máy chủ AI cục bộ phản hồi lỗi: HTTP {resp.status}.",
+                                "actions": []
+                            }
                     
                     data = await resp.json()
                     choice = data.get("choices", [{}])[0]

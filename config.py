@@ -35,8 +35,8 @@ class Config:
     HA_URL: str = os.getenv("HA_URL", "http://localhost:8123").rstrip("/")
     HA_TOKEN: str = os.getenv("HA_TOKEN", "")
 
-    # LLM Engine (gemini / ollama / local)
-    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini").lower()
+    # LLM Engine (ollama / local / gemini)
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "ollama").lower()
     
     # Gemini AI
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")

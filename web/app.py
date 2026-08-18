@@ -1,10 +1,13 @@
+import os
+import io
 import time
 import asyncio
 import json
 import logging
+import numpy as np
 from typing import Dict, Any, List, Optional
 from pathlib import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Form, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -14,6 +17,7 @@ from config import config, STATIC_DIR, TEMPLATES_DIR, SOUNDS_DIR
 from core.orchestrator import orchestrator
 from core.sound_effects import sound_effects
 from core.brain import nexus_brain
+from core.stt import stt_engine
 from integrations.ha_client import ha_client
 from integrations.webhook_client import webhook_client
 from integrations.media_controller import media_controller
@@ -264,3 +268,54 @@ async def api_update_settings(req: SettingsUpdateRequest):
     if req.gemini_model:
         nexus_brain.model_name = req.gemini_model
     return {"status": "ok", "message": "Settings updated successfully."}
+
+@app.post("/api/test/transcribe")
+async def api_test_transcribe(file: UploadFile = File(...)):
+    """Transcribe an audio clip uploaded from the browser microphone test."""
+    try:
+        content = await file.read()
+        import soundfile as sf
+        import tempfile
+
+        # Try reading directly or through temporary file
+        try:
+            data, samplerate = sf.read(io.BytesIO(content), dtype='int16')
+        except Exception:
+            suffix = Path(file.filename or "test.webm").suffix or ".webm"
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tf:
+                tf.write(content)
+                temp_path = tf.name
+            try:
+                data, samplerate = sf.read(temp_path, dtype='int16')
+            finally:
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+
+        if len(data.shape) > 1:
+            data = data.mean(axis=1).astype(np.int16)
+
+        text = stt_engine.transcribe(data, sample_rate=samplerate)
+        logger.info(f"Test Mic Transcription: '{text}'")
+        return {"status": "ok", "text": text}
+    except Exception as e:
+        logger.error(f"Error in test transcribe: {e}")
+        return JSONResponse({"status": "error", "error": str(e), "text": ""}, status_code=500)
+
+@app.get("/api/ollama/status")
+async def api_get_ollama_status():
+    """Check Ollama server connection and list available models."""
+    import aiohttp
+    url = f"{config.OLLAMA_URL}/api/tags"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=3)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    models = [m.get("name") for m in data.get("models", [])]
+                    return {"online": True, "models": models, "active": config.OLLAMA_MODEL}
+                return {"online": False, "models": [], "error": f"HTTP {resp.status}"}
+    except Exception as e:
+        return {"online": False, "models": [], "error": str(e)}

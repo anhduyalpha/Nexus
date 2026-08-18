@@ -365,6 +365,196 @@ document.addEventListener('DOMContentLoaded', () => {
         webhookResult.textContent = JSON.stringify(resData, null, 2);
     });
 
+    // =========================================================
+    // Microphone Diagnostic Modal Logic
+    // =========================================================
+    const modalMicTest = document.getElementById('modal-mic-test');
+    const btnOpenMicTest = document.getElementById('btn-open-mic-test');
+    const btnCloseMicTest = document.getElementById('btn-close-mic-test');
+    const btnMicRecordTest = document.getElementById('btn-mic-record-test');
+    const btnMicPlayTest = document.getElementById('btn-mic-play-test');
+    const micMeterBar = document.getElementById('mic-meter-bar');
+    const micLiveDb = document.getElementById('mic-live-db');
+    const micSttStatus = document.getElementById('mic-stt-status');
+    const micSttResult = document.getElementById('mic-stt-result');
+    const micTestCanvas = document.getElementById('mic-test-canvas');
+    const micTestCtx = micTestCanvas ? micTestCanvas.getContext('2d') : null;
+
+    let micAudioContext = null;
+    let micAnalyser = null;
+    let micMediaStream = null;
+    let micAnimFrame = null;
+    let micMediaRecorder = null;
+    let recordedAudioChunks = [];
+    let recordedAudioBlob = null;
+    let recordedAudioUrl = null;
+    let isRecordingTest = false;
+
+    async function initMicAudioStream() {
+        if (micMediaStream) return true;
+        try {
+            micMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            micAnalyser = micAudioContext.createAnalyser();
+            micAnalyser.fftSize = 128;
+            const source = micAudioContext.createMediaStreamSource(micMediaStream);
+            source.connect(micAnalyser);
+            startMicMeterLoop();
+            return true;
+        } catch (err) {
+            console.error("Mic access error:", err);
+            if (micLiveDb) micLiveDb.textContent = "LỖI: Không thể truy cập Micro trình duyệt (" + err.message + ")";
+            return false;
+        }
+    }
+
+    function stopMicAudioStream() {
+        if (micAnimFrame) cancelAnimationFrame(micAnimFrame);
+        if (micMediaStream) {
+            micMediaStream.getTracks().forEach(track => track.stop());
+            micMediaStream = null;
+        }
+        if (micAudioContext && micAudioContext.state !== 'closed') {
+            micAudioContext.close();
+            micAudioContext = null;
+        }
+        if (micMeterBar) micMeterBar.style.width = '0%';
+        if (micLiveDb) micLiveDb.textContent = '0% (Micro đã đóng)';
+    }
+
+    function startMicMeterLoop() {
+        if (!micAnalyser) return;
+        const dataArray = new Uint8Array(micAnalyser.frequencyBinCount);
+
+        function updateMeter() {
+            if (!micAnalyser || !modalMicTest || !modalMicTest.classList.contains('open')) return;
+            micAnalyser.getByteFrequencyData(dataArray);
+
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i];
+            }
+            const avg = sum / dataArray.length;
+            const pct = Math.min(100, Math.round((avg / 128) * 100));
+
+            if (micMeterBar) micMeterBar.style.width = `${pct}%`;
+            if (micLiveDb) micLiveDb.textContent = `${pct}% (Tín hiệu: ${pct > 15 ? 'Rõ ràng' : 'Im lặng / Nhỏ'})`;
+
+            // Draw mini waveform
+            if (micTestCtx && micTestCanvas) {
+                micTestCtx.clearRect(0, 0, micTestCanvas.width, micTestCanvas.height);
+                micTestCtx.fillStyle = 'rgba(0, 240, 255, 0.7)';
+                const barWidth = (micTestCanvas.width / dataArray.length) * 2;
+                let x = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    const barHeight = (dataArray[i] / 255) * micTestCanvas.height;
+                    micTestCtx.fillRect(x, micTestCanvas.height - barHeight, barWidth - 1, barHeight);
+                    x += barWidth;
+                }
+            }
+
+            micAnimFrame = requestAnimationFrame(updateMeter);
+        }
+        updateMeter();
+    }
+
+    if (btnOpenMicTest) {
+        btnOpenMicTest.addEventListener('click', async () => {
+            modalMicTest.classList.add('open');
+            if (micLiveDb) micLiveDb.textContent = "Đang kết nối Micro...";
+            await initMicAudioStream();
+        });
+    }
+
+    if (btnCloseMicTest) {
+        btnCloseMicTest.addEventListener('click', () => {
+            modalMicTest.classList.remove('open');
+            stopMicAudioStream();
+        });
+    }
+
+    if (btnMicRecordTest) {
+        btnMicRecordTest.addEventListener('click', async () => {
+            if (isRecordingTest) return;
+            const hasMic = await initMicAudioStream();
+            if (!hasMic) return;
+
+            recordedAudioChunks = [];
+            recordedAudioBlob = null;
+            if (btnMicPlayTest) btnMicPlayTest.disabled = true;
+            if (micSttStatus) micSttStatus.textContent = "ĐANG THU ÂM (NÓI NGAY)...";
+            if (micSttResult) micSttResult.innerHTML = '<span class="text-glow-gold">Đang lắng nghe câu lệnh của bạn... (5 giây)</span>';
+
+            micMediaRecorder = new MediaRecorder(micMediaStream);
+            micMediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) recordedAudioChunks.push(e.data);
+            };
+
+            micMediaRecorder.onstop = async () => {
+                isRecordingTest = false;
+                btnMicRecordTest.disabled = false;
+                btnMicRecordTest.innerHTML = '<span class="btn-icon">🎙️</span> BẬT MIC & THU LẠI (5 GIÂY)';
+                
+                recordedAudioBlob = new Blob(recordedAudioChunks, { type: 'audio/webm' });
+                recordedAudioUrl = URL.createObjectURL(recordedAudioBlob);
+                if (btnMicPlayTest) btnMicPlayTest.disabled = false;
+
+                // Send to Faster-Whisper GPU STT endpoint
+                if (micSttStatus) micSttStatus.textContent = "WHISPER GPU ĐANG DỊCH...";
+                if (micSttResult) micSttResult.innerHTML = '<span class="text-glow-cyan">Đang phân tích âm thanh bằng Faster-Whisper GPU...</span>';
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', recordedAudioBlob, 'test_mic.webm');
+
+                    const resp = await fetch('/api/test/transcribe', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const resData = await resp.json();
+                    if (resData.text) {
+                        if (micSttStatus) micSttStatus.textContent = "DỊCH THÀNH CÔNG!";
+                        if (micSttResult) micSttResult.innerHTML = `<strong class="text-glow-cyan" style="font-size: 1.1rem;">"${resData.text}"</strong>`;
+                    } else {
+                        if (micSttStatus) micSttStatus.textContent = "KHÔNG CÓ TIẾNG NÓI";
+                        if (micSttResult) micSttResult.innerHTML = '<em>Không nhận diện được giọng nói trong đoạn thu. Hãy nói to và gần Micro hơn.</em>';
+                    }
+                } catch (err) {
+                    if (micSttStatus) micSttStatus.textContent = "LỖI STT";
+                    if (micSttResult) micSttResult.textContent = "Lỗi khi gọi Whisper STT: " + err.message;
+                }
+            };
+
+            isRecordingTest = true;
+            btnMicRecordTest.disabled = true;
+            micMediaRecorder.start();
+
+            // Count down 5 seconds
+            let secondsLeft = 5;
+            btnMicRecordTest.innerHTML = `<span class="btn-icon">🔴</span> ĐANG GHI ÂM (${secondsLeft}s)...`;
+            const interval = setInterval(() => {
+                secondsLeft--;
+                if (secondsLeft > 0) {
+                    btnMicRecordTest.innerHTML = `<span class="btn-icon">🔴</span> ĐANG GHI ÂM (${secondsLeft}s)...`;
+                } else {
+                    clearInterval(interval);
+                    if (micMediaRecorder && micMediaRecorder.state === 'recording') {
+                        micMediaRecorder.stop();
+                    }
+                }
+            }, 1000);
+        });
+    }
+
+    if (btnMicPlayTest) {
+        btnMicPlayTest.addEventListener('click', () => {
+            if (recordedAudioUrl) {
+                const audio = new Audio(recordedAudioUrl);
+                audio.play();
+            }
+        });
+    }
+
     // Arc Reactor Audio Visualizer Loop
     function drawVisualizer() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
