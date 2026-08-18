@@ -393,6 +393,9 @@ class XiaomiSatellite:
                                 await asyncio.sleep(0.1)
                                 continue
 
+                            # Read hardware mic chunk
+                            raw_chunk = self.read_audio_chunk(stream)
+
                             # Raw hardware RMS before filter
                             raw_float = raw_chunk.astype(np.float32) / 32768.0
                             raw_rms = float(np.sqrt(np.mean(raw_float ** 2))) if raw_float.size > 0 else 0.0
