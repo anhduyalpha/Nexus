@@ -187,9 +187,28 @@ class XiaomiSatellite:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
                 )
-                time.sleep(1.2)
+                time.sleep(1.0)
+
+                # 🔇 Mute scrcpy in Windows Volume Mixer (Zero Feedback to Physical Speakers)
+                threading.Thread(target=self._mute_scrcpy_loop, daemon=True).start()
             except Exception as e:
                 logger.error(f"Failed to start scrcpy: {e}")
+
+    def _mute_scrcpy_loop(self):
+        """Ensure scrcpy.exe is muted in Windows Audio Mixer so it never echoes to physical speakers."""
+        try:
+            from pycaw.pycaw import AudioUtilities
+            for _ in range(15):
+                sessions = AudioUtilities.GetAllSessions()
+                for session in sessions:
+                    if session.Process and "scrcpy" in session.Process.name().lower():
+                        vol = session.SimpleAudioVolume
+                        vol.SetMute(1, None)
+                        logger.info("🔇 [ZERO-ECHO] scrcpy output muted in Windows Volume Mixer (No sound to speakers)!")
+                        return
+                time.sleep(0.3)
+        except Exception as e:
+            logger.debug(f"pycaw session mute notice: {e}")
 
     def get_audio_stream(self):
         """Open microphone PyAudio stream on Windows."""
