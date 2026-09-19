@@ -1,16 +1,19 @@
 {
   "name": "nexus",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "packageManager": "pnpm@12.4.2",
-  "engines": {
-    "node": ">=24 <25"
-  },
+  "engines": { "node": ">=24 <25" },
   "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "start": "node --env-file-if-exists=.env --experimental-strip-types packages/core/src/main.ts",
+    "build": "pnpm --filter @nexus/web build",
     "typecheck": "pnpm -r --if-present run typecheck",
-    "test": "pnpm -r --if-present run test"
+    "test": "pnpm -r --if-present run test",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@types/node": "^24.0.0",
     "typescript": "^5.8.2"
   }

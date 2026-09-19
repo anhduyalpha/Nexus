@@ -1,12 +1,6 @@
 {
-  "name": "@nexus/web",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@nexus/shared": "workspace:*"
-  }
+  "name": "@nexus/web", "version": "0.2.0", "private": true, "type": "module",
+  "scripts": { "dev": "vite", "build": "vue-tsc --noEmit && vite build", "typecheck": "vue-tsc --noEmit && tsc -p tsconfig.node.json" },
+  "dependencies": { "@nexus/shared": "workspace:*", "vue": "^3.5.21", "lucide-vue-next": "^0.468.0" },
+  "devDependencies": { "vite": "^7.1.5", "@vitejs/plugin-vue": "^6.0.1", "vue-tsc": "^3.0.6", "tailwindcss": "^4.1.13", "@tailwindcss/vite": "^4.1.13" }
 }

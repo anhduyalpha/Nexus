@@ -1,2 +1,3 @@
-// Core package boundary only. Application bootstrap belongs to a later task.
-export {};
+// Importing this module does not start a server or open a database.
+export { createApp } from './app.ts';
+export { loadConfig } from './config.ts';
