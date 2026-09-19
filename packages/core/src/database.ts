@@ -5,11 +5,23 @@ import { desc, eq } from 'drizzle-orm';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { StoredFile } from '@nexus/shared';
+
 const files = sqliteTable('files', {
   id: text('id').primaryKey(), name: text('name').notNull(), mime: text('mime').notNull(),
   bytes: integer('bytes').notNull(), createdAt: text('created_at').notNull(), tool: text('tool').notNull(),
 });
-export function openDatabase(dataDir: string) {
+
+/** Internal persistence service; never exported from the public Shared package. */
+export interface NexusDatabase {
+  readonly sqlite: Database.Database;
+  addFile(value: StoredFile): StoredFile;
+  file(id: string): StoredFile | undefined;
+  files(): StoredFile[];
+  removeFile(id: string): void;
+  close(): void;
+}
+
+export function openDatabase(dataDir: string): NexusDatabase {
   mkdirSync(join(dataDir, 'db'), { recursive: true });
   const sqlite = new Database(join(dataDir, 'db', 'nexus.sqlite'));
   sqlite.pragma('journal_mode = WAL');
@@ -19,11 +31,10 @@ export function openDatabase(dataDir: string) {
   const db = drizzle(sqlite);
   return {
     sqlite,
-    addFile(value: StoredFile) { db.insert(files).values(value).run(); return value; },
-    file(id: string) { return db.select().from(files).where(eq(files.id, id)).get(); },
+    addFile(value) { db.insert(files).values(value).run(); return value; },
+    file(id) { return db.select().from(files).where(eq(files.id, id)).get(); },
     files() { return db.select().from(files).orderBy(desc(files.createdAt)).limit(100).all(); },
-    removeFile(id: string) { db.delete(files).where(eq(files.id, id)).run(); },
+    removeFile(id) { db.delete(files).where(eq(files.id, id)).run(); },
     close() { sqlite.close(); },
   };
 }
-export type NexusDatabase = ReturnType<typeof openDatabase>;
