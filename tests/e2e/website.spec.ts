@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 test('desktop: create a real QR, download and see it in the library', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Everyday tasks/ })).toBeVisible();
+  await page.screenshot({ path: 'test-results/desktop-home.png', fullPage: true });
   await page.getByRole('button', { name: /QR generator.*Turn text/ }).click();
   await page.getByLabel('Text or link').fill('https://example.com/nexus');
   await page.getByRole('button', { name: 'Generate QR code' }).click();
@@ -12,14 +14,38 @@ test('desktop: create a real QR, download and see it in the library', async ({ p
   expect(download.suggestedFilename()).toBe('qr-code.png');
   await page.getByRole('button', { name: /My files/ }).click();
   await expect(page.getByText('qr-code.png').first()).toBeVisible();
+  expect(errors).toEqual([]);
 });
 test('mobile: navigation and QR form have no horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Everyday tasks/ })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/mobile-home.png', fullPage: true });
   await page.getByRole('button', { name: /QR generator.*Turn text/ }).click();
   await expect(page.getByLabel('Text or link')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.screenshot({ path: 'test-results/mobile.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/mobile-qr.png', fullPage: true });
+});
+test('browser Tus upload -> Redis image job -> live activity -> real download', async ({ page, request }) => {
+  test.skip(!process.env.NEXUS_TEST_REDIS_URL, 'Requires the real Redis integration environment');
+  const generated = await request.post('/api/tools/qr/run', { data: { text: 'Browser upload input' } });
+  expect(generated.ok()).toBe(true);
+  const file = (await generated.json()).files[0];
+  const bytes = await (await request.get(`/api/files/${file.id}`)).body();
+  const filename = `browser-input-${Date.now()}.png`;
+  await page.goto('/');
+  await page.getByRole('button', { name: /Image converter.*Resize/ }).click();
+  await page.getByLabel('Choose files to upload').setInputFiles({ name: filename, mimeType: 'image/png', buffer: bytes });
+  await expect(page.getByRole('checkbox', { name: new RegExp(filename.replaceAll('.', '\\.')) })).toBeChecked();
+  const jobPromise = page.waitForResponse(response => response.url().endsWith('/api/jobs') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Start processing' }).click();
+  const response = await jobPromise; expect(response.status()).toBe(202);
+  const job = (await response.json()).job;
+  const card = page.locator('.job-card').filter({ hasText: job.id.slice(0, 8) });
+  await expect(card.locator('.job-status')).toHaveText('completed', { timeout: 20000 });
+  const downloadPromise = page.waitForEvent('download');
+  await card.getByRole('link', { name: 'converted.webp' }).click();
+  expect((await downloadPromise).suggestedFilename()).toBe('converted.webp');
+  await page.screenshot({ path: 'test-results/desktop-activity.png', fullPage: true });
 });
