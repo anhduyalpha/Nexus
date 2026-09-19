@@ -35,16 +35,18 @@ export async function createApp(config: Config = loadConfig(), plugins: readonly
     if (host.username || host.password || !allowedHosts.has(host.hostname)) return reply.code(403).send({ error: 'Host not allowed' });
     const origin = request.headers.origin;
     if (origin && !config.origins.includes(origin)) return reply.code(403).send({ error: 'Origin not allowed' });
-    reply.header('X-Content-Type-Options', 'nosniff').header('Referrer-Policy', 'no-referrer');
+    reply.header('X-Content-Type-Options', 'nosniff').header('Referrer-Policy', 'no-referrer').header('Cross-Origin-Resource-Policy', 'same-origin');
+    reply.header('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'");
     if (request.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
     const path = request.url.split('?')[0];
     if (path.startsWith('/api/') && path !== '/api/health' && path !== '/api/session' && !authorized(request)) return reply.code(401).send({ error: 'Sign in with your Nexus access token' });
   });
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) return reply.code(400).send({ error: error.issues.map(item => `${item.path.join('.') || 'input'}: ${item.message}`).join('; ') });
-    const status = typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500 ? error.statusCode : 500;
+    const code = error instanceof Error && 'statusCode' in error ? error.statusCode : undefined;
+    const status = typeof code === 'number' && code >= 400 && code < 500 ? code : 500;
     if (status === 500) request.log.error({ err: error }, 'Request failed');
-    return reply.code(status).send({ error: status === 500 ? 'Processing failed. Check the input format or server log.' : error.message });
+    return reply.code(status).send({ error: status === 500 || !(error instanceof Error) ? 'Processing failed. Check the input format or server log.' : error.message });
   });
   app.get('/api/health', async () => ({ status: 'ok', version: '0.2.0' }));
   app.get('/api/session', async request => ({ authenticated: authorized(request), protected: Boolean(config.token) }));
@@ -88,7 +90,7 @@ export async function createApp(config: Config = loadConfig(), plugins: readonly
       const files = [];
       for (const artifact of artifacts) {
         if (!artifact.data) throw new Error('Instant tools must return bounded output buffers');
-        files.push(await storage.save(Readable.from(artifact.data), artifact.name, artifact.mime, plugin.descriptor.id));
+        files.push(await storage.save(Readable.from([artifact.data]), artifact.name, artifact.mime, plugin.descriptor.id));
       }
       return { files };
     } finally { await rm(dir, { recursive: true, force: true }); }
