@@ -1,4 +1,5 @@
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
+
 export interface ToolDescriptor {
   readonly id: string;
   readonly name: string;
@@ -28,5 +29,19 @@ export type GeneratedArtifact = { readonly name: string; readonly mime: string }
 export interface ToolPlugin {
   readonly descriptor: ToolDescriptor;
   validate(input: unknown): void;
+  /** undefined means ready; otherwise return a user-facing missing-engine explanation. */
+  checkAvailability?(): Promise<string | undefined>;
   run(input: unknown, context: ToolContext): Promise<readonly GeneratedArtifact[]>;
+}
+export interface TaskJob {
+  readonly id: string;
+  readonly tool: string;
+  readonly status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  readonly input: JsonValue;
+  readonly fileIds: readonly string[];
+  readonly output: readonly StoredFile[];
+  readonly percent: number;
+  readonly message: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 }

@@ -33,7 +33,45 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: git diff --check origin/main...HEAD && git diff --exit-code -- pnpm-lock.yaml
-      - if: runner.os == 'Linux'
-        run: pnpm exec playwright install --with-deps chromium
-      - if: runner.os == 'Linux'
-        run: pnpm test:e2e
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      NEXUS_TEST_REDIS_URL: redis://127.0.0.1:6379
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: npm install --global pnpm@12.4.2
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck && pnpm test && pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: browser-verification
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Build and smoke-test the full container
+        run: |
+          docker build -t nexus-preview:ci .
+          docker run -d --name nexus-smoke --network host -e NEXUS_HOST=127.0.0.1 -e NEXUS_PORT=4312 -e NEXUS_DATA_DIR=/data -e NEXUS_REDIS_URL=redis://127.0.0.1:6379 nexus-preview:ci
+          trap 'docker logs nexus-smoke; docker rm -f nexus-smoke' EXIT
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4312/api/health; then break; fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:4312/api/health
+          curl --fail --silent http://127.0.0.1:4312/ | grep 'Nexus'
