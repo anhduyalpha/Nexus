@@ -173,7 +173,19 @@ importers:
         specifier: ^5.8.2
         version: 5.9.3
 
+  packages/core:
+    dependencies:
+      '@nexus/shared':
+        specifier: workspace:*
+        version: link:../shared
+
   packages/shared: {}
+
+  packages/web:
+    dependencies:
+      '@nexus/shared':
+        specifier: workspace:*
+        version: link:../shared
 
 packages:
 
