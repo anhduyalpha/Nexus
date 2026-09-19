@@ -13,12 +13,16 @@ import type { ToolPlugin } from '@nexus/shared';
 import { loadConfig, type Config } from './config.ts';
 import { openDatabase } from './database.ts';
 import { Storage, byteRange, validId } from './storage-service.ts';
+import { registerProcessing } from './processing.ts';
+
 export async function createApp(config: Config = loadConfig(), plugins: readonly ToolPlugin[] = tools) {
-  const app = Fastify({ logger: { level: 'warn', redact: ['req.headers.cookie', 'req.headers.authorization', 'body.token'] }, bodyLimit: 1024 * 1024, requestTimeout: 120000 });
-  const db = openDatabase(config.dataDir);
-  const storage = new Storage(config.dataDir, db, config.maxFileBytes);
   const registry = new Map(plugins.map(plugin => [plugin.descriptor.id, plugin]));
   if (registry.size !== plugins.length) throw new Error('Duplicate tool id');
+  const app = Fastify({ logger: { level: 'warn', redact: ['req.headers.cookie', 'req.headers.authorization', 'body.token'] }, bodyLimit: 1024 * 1024, requestTimeout: 120000 });
+  const db = openDatabase(config.dataDir);
+  // Registered first so it runs after later close hooks (workers/uploads).
+  app.addHook('onClose', async () => { db.close(); });
+  const storage = new Storage(config.dataDir, db, config.maxFileBytes);
   await app.register(cookie, { secret: randomBytes(32).toString('hex') });
   await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
   const allowedHosts = new Set(config.origins.map(origin => new URL(origin).hostname));
@@ -48,7 +52,7 @@ export async function createApp(config: Config = loadConfig(), plugins: readonly
     if (status === 500) request.log.error({ err: error }, 'Request failed');
     return reply.code(status).send({ error: status === 500 || !(error instanceof Error) ? 'Processing failed. Check the input format or server log.' : error.message });
   });
-  app.get('/api/health', async () => ({ status: 'ok', version: '0.2.0' }));
+  app.get('/api/health', async () => ({ status: 'ok', version: '0.3.0' }));
   app.get('/api/session', async request => ({ authenticated: authorized(request), protected: Boolean(config.token) }));
   app.post('/api/session', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (request, reply) => {
     const input = z.object({ token: z.string().max(512) }).strict().parse(request.body);
@@ -58,7 +62,7 @@ export async function createApp(config: Config = loadConfig(), plugins: readonly
     return { authenticated: true };
   });
   app.delete('/api/session', async (_request, reply) => { reply.clearCookie('nexus', { path: '/' }); return { authenticated: false }; });
-  app.get('/api/tools', async () => ({ tools: plugins.map(plugin => ({ ...plugin.descriptor, available: plugin.descriptor.mode === 'instant' })), jobsAvailable: false, maxFileBytes: config.maxFileBytes }));
+  const processing = await registerProcessing(app, config, db, storage, registry);
   app.get('/api/files', async () => ({ files: db.files() }));
   app.get<{ Params: { id: string }; Querystring: { preview?: string } }>('/api/files/:id', async (request, reply) => {
     const file = validId(request.params.id) ? db.file(request.params.id) : undefined;
@@ -74,31 +78,35 @@ export async function createApp(config: Config = loadConfig(), plugins: readonly
   });
   app.delete<{ Params: { id: string } }>('/api/files/:id', async (request, reply) => {
     if (!validId(request.params.id) || !db.file(request.params.id)) return reply.code(404).send({ error: 'File not found' });
+    if (processing.usesFile(request.params.id)) return reply.code(409).send({ error: 'A pending or running job is using this file' });
     await storage.remove(request.params.id);
     return reply.code(204).send();
   });
   app.post<{ Params: { id: string } }>('/api/tools/:id/run', async (request, reply) => {
     const plugin = registry.get(request.params.id);
     if (!plugin) return reply.code(404).send({ error: 'Tool not found' });
-    if (plugin.descriptor.mode !== 'instant') return reply.code(503).send({ error: 'This tool requires the job worker' });
+    if (plugin.descriptor.mode !== 'instant') return reply.code(400).send({ error: 'Submit this tool through the jobs API' });
     plugin.validate(request.body);
     const root = join(config.dataDir, '.work');
     await mkdir(root, { recursive: true });
     const dir = await mkdtemp(join(root, 'instant-'));
+    const files = [];
     try {
       const artifacts = await plugin.run(request.body, { signal: AbortSignal.timeout(30000), files: [], workDir: dir, progress() {} });
-      const files = [];
+      if (artifacts.length > 10) throw new Error('Too many instant outputs');
       for (const artifact of artifacts) {
         if (!artifact.data) throw new Error('Instant tools must return bounded output buffers');
         files.push(await storage.save(Readable.from([artifact.data]), artifact.name, artifact.mime, plugin.descriptor.id));
       }
       return { files };
+    } catch (error) {
+      for (const file of files) await storage.remove(file.id).catch(() => undefined);
+      throw error;
     } finally { await rm(dir, { recursive: true, force: true }); }
   });
   if (existsSync(join(config.webDir, 'index.html'))) {
     await app.register(serveStatic, { root: config.webDir });
     app.setNotFoundHandler((request, reply) => request.url.startsWith('/api/') ? reply.code(404).send({ error: 'Not found' }) : reply.sendFile('index.html'));
   }
-  app.addHook('onClose', async () => { db.close(); });
   return app;
 }

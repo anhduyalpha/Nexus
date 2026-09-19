@@ -1,20 +1,14 @@
 {
-  "name": "nexus",
-  "private": true,
-  "version": "0.2.0",
-  "packageManager": "pnpm@12.4.2",
-  "engines": { "node": ">=24 <25" },
+  "name": "nexus", "private": true, "version": "0.3.0",
+  "packageManager": "pnpm@12.4.2", "engines": { "node": ">=24 <25" },
   "scripts": {
-    "dev": "node scripts/dev.mjs",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
     "start": "node --env-file-if-exists=.env --experimental-strip-types packages/core/src/main.ts",
     "build": "pnpm --filter @nexus/web build",
     "typecheck": "pnpm -r --if-present run typecheck",
     "test": "pnpm -r --if-present run test",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "services": "docker compose up -d redis"
   },
-  "devDependencies": {
-    "@playwright/test": "^1.55.0",
-    "@types/node": "^24.0.0",
-    "typescript": "^5.8.2"
-  }
+  "devDependencies": { "@playwright/test": "^1.55.0", "@types/node": "^24.0.0", "typescript": "^5.8.2" }
 }

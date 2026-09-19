@@ -1,7 +1,26 @@
 {
-  "name": "@nexus/tools", "version": "0.2.0", "private": true, "type": "module",
+  "name": "@nexus/tools",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
   "exports": { ".": { "types": "./src/index.ts", "import": "./src/index.ts" } },
-  "scripts": { "typecheck": "tsc --noEmit", "test": "node --test --experimental-strip-types test/*.test.ts" },
-  "dependencies": { "@nexus/shared": "workspace:*", "qrcode": "^1.5.4", "zod": "^3.25.0" },
-  "devDependencies": { "@types/qrcode": "^1.5.5" }
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "dependencies": {
+    "@nexus/shared": "workspace:*",
+    "qrcode": "^1.5.4",
+    "zod": "^3.25.0",
+    "sharp": "^0.34.3",
+    "pdf-lib": "^1.17.1",
+    "yauzl": "^3.2.0",
+    "yazl": "^3.3.0",
+    "execa": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5",
+    "@types/yauzl": "^2.10.3",
+    "@types/yazl": "^2.4.5"
+  }
 }
