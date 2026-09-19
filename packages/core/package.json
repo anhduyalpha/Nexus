@@ -1,0 +1,13 @@
+{
+  "name": "@nexus/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types test/shared-contracts.test.ts"
+  },
+  "dependencies": {
+    "@nexus/shared": "workspace:*"
+  }
+}

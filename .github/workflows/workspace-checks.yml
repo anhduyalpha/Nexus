@@ -1,0 +1,53 @@
+name: Workspace checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Install the pinned package manager
+        run: npm install --global pnpm@12.4.2
+      - name: Record tool versions
+        run: |
+          node --version
+          pnpm --version
+      - name: Install from committed lockfile
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck all workspace packages
+        run: pnpm typecheck
+      - name: Check packages independently
+        run: |
+          pnpm --filter @nexus/shared typecheck
+          pnpm --filter @nexus/core typecheck
+          pnpm --filter @nexus/web typecheck
+      - name: Run focused tests
+        run: pnpm test
+      - name: Check committed patch and working tree
+        run: |
+          git diff --check origin/main...HEAD
+          git diff --check
+          git diff --exit-code -- pnpm-lock.yaml
