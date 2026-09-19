@@ -1,0 +1,43 @@
+name: Workspace checks
+
+on:
+  push:
+    branches: [main, task/TASK-002]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      - name: Install the pinned package manager
+        run: npm install --global pnpm@12.4.2
+      - name: Record tool versions
+        run: |
+          node --version
+          pnpm --version
+      - name: Generate workspace dependency state
+        run: pnpm install --no-frozen-lockfile
+      - name: Capture generated lockfile for review
+        run: |
+          echo 'GENERATED_LOCKFILE_BEGIN'
+          cat pnpm-lock.yaml
+          echo 'GENERATED_LOCKFILE_END'
+      - name: Verify frozen install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck all workspace packages
+        run: pnpm typecheck
+      - name: Run focused tests
+        run: pnpm test
+      - name: Check whitespace
+        run: git diff --check
